@@ -1,0 +1,25 @@
+import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
+import { useState } from 'react';
+import { useStore } from '../store/useStore';
+const DEPTH_OPTIONS = [
+    { value: 0, label: '0 — Index only', desc: 'Only scan the main URL' },
+    { value: 1, label: '1 level', desc: 'Follow links 1 level deep (recommended)' },
+    { value: 2, label: '2 levels', desc: 'Deeper crawl — slower, more surface coverage' },
+];
+const BUDGET_OPTIONS = [
+    { value: 30, label: '30 requests', desc: 'Fast scan, essential checks' },
+    { value: 60, label: '60 requests', desc: 'Balanced — recommended' },
+    { value: 100, label: '100 requests', desc: 'Thorough — more injection tests' },
+    { value: 200, label: '200 requests', desc: 'Deep dive — best coverage, slowest' },
+];
+export const UrlScanForm = () => {
+    const { urlInput, setUrlInput, authConfig, setAuthConfig, performUrlScan, isLoading, crawlDepth, setCrawlDepth, requestBudget, setRequestBudget, } = useStore();
+    const [showAuth, setShowAuth] = useState(false);
+    return (_jsxs(_Fragment, { children: [_jsxs("div", { className: "section", children: [_jsx("div", { className: "section-label", children: "Target" }), _jsxs("div", { className: "field", children: [_jsx("label", { className: "field-label", children: "URL" }), _jsxs("div", { className: "input-clear-row", children: [_jsx("input", { type: "text", placeholder: "https://example.com", value: urlInput, onChange: (e) => setUrlInput(e.target.value), disabled: isLoading, onKeyDown: (e) => e.key === 'Enter' && !isLoading && performUrlScan() }), urlInput && (_jsx("button", { type: "button", className: "btn-clear", title: "Clear URL", disabled: isLoading, onClick: () => setUrlInput(''), children: "\u2715" }))] })] }), _jsxs("div", { className: "field-row", children: [_jsxs("div", { className: "field", children: [_jsxs("label", { className: "field-label", children: ["Crawl Depth", _jsx("span", { className: "field-help", title: DEPTH_OPTIONS.find(o => o.value === crawlDepth)?.desc, children: "?" })] }), _jsx("select", { value: crawlDepth, onChange: (e) => setCrawlDepth(Number(e.target.value)), disabled: isLoading, children: DEPTH_OPTIONS.map(o => _jsx("option", { value: o.value, children: o.label }, o.value)) })] }), _jsxs("div", { className: "field", children: [_jsxs("label", { className: "field-label", children: ["Request Budget", _jsx("span", { className: "field-help", title: BUDGET_OPTIONS.find(o => o.value === requestBudget)?.desc, children: "?" })] }), _jsx("select", { value: requestBudget, onChange: (e) => setRequestBudget(Number(e.target.value)), disabled: isLoading, children: BUDGET_OPTIONS.map(o => _jsx("option", { value: o.value, children: o.label }, o.value)) })] })] }), _jsx("div", { className: "scan-profile-hint", children: crawlDepth >= 2 || requestBudget >= 100
+                            ? '🔴 Thorough scan — may take 60–120s'
+                            : crawlDepth === 1 && requestBudget >= 60
+                                ? '🟡 Balanced scan — ~30–60s'
+                                : '🟢 Quick scan — ~10–30s' })] }), _jsxs("div", { className: "section", children: [_jsxs("button", { type: "button", className: `collapsible-btn ${showAuth ? 'open' : ''}`, onClick: () => setShowAuth(!showAuth), children: [_jsx("span", { children: "Authentication" }), _jsx("span", { className: `collapsible-icon ${showAuth ? 'open' : ''}`, children: "\u25B6" })] }), showAuth && (_jsxs("div", { className: "collapsible-body", children: [_jsxs("div", { className: "field", children: [_jsx("label", { className: "field-label", children: "Cookie" }), _jsx("input", { type: "text", placeholder: "session=abc123; token=xyz", value: authConfig.cookie, onChange: (e) => setAuthConfig({ cookie: e.target.value }), disabled: isLoading })] }), _jsxs("div", { className: "field", children: [_jsx("label", { className: "field-label", children: "Bearer Token" }), _jsx("input", { type: "text", placeholder: "eyJhbGci...", value: authConfig.bearerToken, onChange: (e) => setAuthConfig({ bearerToken: e.target.value }), disabled: isLoading })] }), _jsxs("div", { className: "field", children: [_jsx("label", { className: "field-label", children: "Authorization Header" }), _jsx("input", { type: "text", placeholder: "Basic dXNlcjpwYXNz", value: authConfig.authorization, onChange: (e) => setAuthConfig({ authorization: e.target.value }), disabled: isLoading })] }), _jsxs("div", { className: "field", children: [_jsx("label", { className: "field-label", children: "Custom Headers (JSON)" }), _jsx("textarea", { placeholder: '{"X-API-Key": "abc123"}', value: typeof authConfig.customHeaders === 'string'
+                                            ? authConfig.customHeaders
+                                            : JSON.stringify(authConfig.customHeaders || {}, null, 2), onChange: (e) => setAuthConfig({ customHeaders: e.target.value }), disabled: isLoading, rows: 2 })] })] }))] }), _jsx("button", { className: "btn-primary", onClick: performUrlScan, disabled: isLoading, children: isLoading ? 'Scanning…' : 'Start Scan' })] }));
+};

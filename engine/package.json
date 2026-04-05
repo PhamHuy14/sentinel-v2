@@ -1,0 +1,7 @@
+{
+  "name": "sentinel-engine",
+  "version": "1.0.0",
+  "description": "SENTINEL OWASP 2025 scan engine",
+  "main": "scanner/scan-engine.js",
+  "private": true
+}

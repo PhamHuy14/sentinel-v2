@@ -1,0 +1,74 @@
+import React from 'react';
+import { useStore } from '../store/useStore';
+
+export const ProjectScanForm: React.FC = () => {
+  const { selectedFolder, setSelectedFolder, performProjectScan, isLoading } = useStore();
+
+  const handleBrowse = async () => {
+    const result = await window.owaspWorkbench?.pickFolder?.();
+    if (result?.ok && result.folderPath) setSelectedFolder(result.folderPath);
+  };
+
+  const scopeItems = [
+    'npm/yarn dependencies (CVE lookup)',
+    'Hardcoded secrets & API keys',
+    'Config & environment files',
+    'CI/CD pipeline security',
+    'Logging & error handling',
+  ];
+
+  return (
+    <>
+      <div className="section">
+        <div className="section-label">Project Folder</div>
+        <div className="field">
+          <label className="field-label">Source Directory</label>
+          <div style={{ display: 'flex', gap: 10, width: '100%' }}>
+            <div className="input-clear-row">
+              <input
+                type="text"
+                value={selectedFolder || ''}
+                readOnly
+                placeholder="No folder selected"
+              />
+              {selectedFolder && (
+                <button
+                  type="button"
+                  className="btn-clear"
+                  title="Clear folder"
+                  disabled={isLoading}
+                  onClick={() => setSelectedFolder('')}
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+            <button className="btn-secondary" onClick={handleBrowse} disabled={isLoading} style={{ whiteSpace: 'nowrap' }}>
+              Browse
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="section">
+        <div className="section-label">Scan Scope</div>
+        <ul className="scope-list">
+          {scopeItems.map((item, i) => (
+            <li key={i} className="scope-item">
+              <span className="scope-bullet" />
+              {item}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <button
+        className="btn-primary"
+        onClick={performProjectScan}
+        disabled={isLoading || !selectedFolder}
+      >
+        {isLoading ? 'Scanning...' : 'Scan Project'}
+      </button>
+    </>
+  );
+};
