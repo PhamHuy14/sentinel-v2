@@ -1,35 +1,60 @@
 import { create } from 'zustand';
 const HISTORY_KEY = 'sentinel_v2_history';
 const MAX_HISTORY = 10;
-const MAX_LOG = 200; // limit progressLog to avoid memory growth
-// ── LocalStorage helpers ──────────────────────────────────────────────────────
-function loadHistoryFromStorage() {
-    try {
-        const raw = localStorage.getItem(HISTORY_KEY) || '[]';
-        const entries = JSON.parse(raw);
-        return entries;
-    }
-    catch (_e) {
-        return [];
-    }
+const MAX_LOG = 200;
+// ── IndexedDB helpers ──────────────────────────────────────────────────────
+const DB_NAME = 'SentinelV2DB';
+const STORE_NAME = 'historyStore';
+function openDB() {
+    return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = () => {
+            if (!req.result.objectStoreNames.contains(STORE_NAME)) {
+                req.result.createObjectStore(STORE_NAME);
+            }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+    });
 }
-function saveHistoryToStorage(h) {
+async function loadHistoryFromDB() {
     try {
-        const slim = h.map(e => ({
-            ...e,
-            scanResult: {
-                ...e.scanResult,
-                findings: e.scanResult.findings.slice(0, 100),
-            },
-        }));
-        localStorage.setItem(HISTORY_KEY, JSON.stringify(slim));
+        const db = await openDB();
+        return new Promise((resolve) => {
+            const tx = db.transaction(STORE_NAME, 'readonly');
+            const req = tx.objectStore(STORE_NAME).get(HISTORY_KEY);
+            req.onsuccess = () => resolve(req.result || []);
+            req.onerror = () => resolve([]);
+        });
     }
     catch (_e) {
         try {
-            const trimmed = h.slice(0, Math.max(1, Math.floor(h.length / 2)));
-            localStorage.setItem(HISTORY_KEY, JSON.stringify(trimmed));
+            const raw = localStorage.getItem(HISTORY_KEY) || '[]';
+            return JSON.parse(raw);
         }
-        catch (_e2) {
+        catch {
+            return [];
+        }
+    }
+}
+async function saveHistoryToDB(h) {
+    try {
+        const db = await openDB();
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        tx.objectStore(STORE_NAME).put(h, HISTORY_KEY);
+    }
+    catch (_e) {
+        try {
+            const slim = h.map(e => ({
+                ...e,
+                scanResult: {
+                    ...e.scanResult,
+                    findings: e.scanResult.findings.slice(0, 50),
+                },
+            }));
+            localStorage.setItem(HISTORY_KEY, JSON.stringify(slim.slice(0, Math.max(1, Math.floor(slim.length / 2)))));
+        }
+        catch {
             void 0;
         }
     }
@@ -37,6 +62,54 @@ function saveHistoryToStorage(h) {
 function calcRiskScore(findings) {
     const SEV_W = { critical: 10, high: 7, medium: 4, low: 1 };
     return Math.min(100, findings.reduce((s, f) => s + (SEV_W[f.severity] || 0), 0));
+}
+/**
+ * Kiểm tra URL có phải local/localhost không.
+ * Local URL → kết quả scan được dùng để tạo checklist.
+ * Public URL → không đưa vào checklist.
+ */
+export function isLocalUrl(url) {
+    if (!url)
+        return false;
+    try {
+        const parsed = new URL(url);
+        const h = parsed.hostname.toLowerCase();
+        return (h === 'localhost' ||
+            h === '127.0.0.1' ||
+            h === '::1' ||
+            h.endsWith('.localhost') ||
+            // Private IPv4 ranges
+            /^10\./.test(h) ||
+            /^192\.168\./.test(h) ||
+            /^172\.(1[6-9]|2\d|3[01])\./.test(h));
+    }
+    catch {
+        return false;
+    }
+}
+/**
+ * Gộp findings từ URL scan (local) và Project scan, loại bỏ trùng lặp.
+ * Hai finding được coi là trùng nếu có cùng ruleId + owaspCategory + severity.
+ */
+export function mergeFindings(urlFindings, projectFindings) {
+    const seen = new Set();
+    const result = [];
+    const makeKey = (f) => `${f.ruleId}||${f.owaspCategory}||${f.severity}`;
+    for (const f of urlFindings) {
+        const key = makeKey(f);
+        if (!seen.has(key)) {
+            seen.add(key);
+            result.push(f);
+        }
+    }
+    for (const f of projectFindings) {
+        const key = makeKey(f);
+        if (!seen.has(key)) {
+            seen.add(key);
+            result.push(f);
+        }
+    }
+    return result;
 }
 const ipc = () => {
     if (typeof window !== 'undefined' && window.owaspWorkbench)
@@ -47,8 +120,22 @@ export const useStore = create((set, get) => ({
     activeTab: 'url',
     setActiveTab: (tab) => set({ activeTab: tab }),
     isLoading: false,
-    scanResult: null,
+    urlScanResult: null,
+    projectScanResult: null,
     error: null,
+    urlScanIsLocal: false,
+    getCombinedFindings: () => {
+        const { urlScanResult, projectScanResult, urlScanIsLocal } = get();
+        const urlFindings = urlScanIsLocal ? (urlScanResult?.findings ?? []) : [];
+        const projFindings = projectScanResult?.findings ?? [];
+        return mergeFindings(urlFindings, projFindings);
+    },
+    checkedChecklistItems: [],
+    toggleChecklistItem: (id) => set((s) => ({
+        checkedChecklistItems: s.checkedChecklistItems.includes(id)
+            ? s.checkedChecklistItems.filter(i => i !== id)
+            : [...s.checkedChecklistItems, id]
+    })),
     urlInput: '',
     authConfig: { cookie: '', bearerToken: '', authorization: '', customHeaders: '' },
     setUrlInput: (url) => set({ urlInput: url }),
@@ -63,13 +150,16 @@ export const useStore = create((set, get) => ({
     progressLog: [],
     appendProgress: (ev) => set((s) => ({
         progressLog: s.progressLog.length >= MAX_LOG
-            ? [...s.progressLog.slice(-MAX_LOG + 1), ev] // rolling window
+            ? [...s.progressLog.slice(-MAX_LOG + 1), ev]
             : [...s.progressLog, ev],
     })),
     clearProgress: () => set({ progressLog: [] }),
-    history: loadHistoryFromStorage(),
-    loadHistory: () => set({ history: loadHistoryFromStorage() }),
-    saveToHistory: (result) => {
+    history: [],
+    loadHistory: async () => {
+        const data = await loadHistoryFromDB();
+        set({ history: data });
+    },
+    saveToHistory: async (result) => {
         const riskScore = calcRiskScore(result.findings);
         const entry = {
             id: Date.now().toString(),
@@ -80,16 +170,26 @@ export const useStore = create((set, get) => ({
             summary: { total: result.metadata.summary.total, bySeverity: result.metadata.summary.bySeverity },
             scanResult: result,
         };
-        const updated = [entry, ...loadHistoryFromStorage()].slice(0, MAX_HISTORY);
-        saveHistoryToStorage(updated);
+        const updated = [entry, ...get().history].slice(0, MAX_HISTORY);
         set({ history: updated });
+        await saveHistoryToDB(updated);
     },
     restoreFromHistory: (id) => {
         const entry = get().history.find((e) => e.id === id);
-        if (entry)
-            set({ scanResult: entry.scanResult, error: null, showHistoryDropdown: false });
+        if (entry) {
+            if (entry.mode === 'url-scan') {
+                const local = isLocalUrl(entry.scanResult.scannedUrl || '');
+                set({ urlScanResult: entry.scanResult, urlScanIsLocal: local, activeTab: 'url', error: null, showHistoryDropdown: false });
+            }
+            else {
+                set({ projectScanResult: entry.scanResult, activeTab: 'project', error: null, showHistoryDropdown: false });
+            }
+        }
     },
-    clearHistory: () => { saveHistoryToStorage([]); set({ history: [] }); },
+    clearHistory: async () => {
+        set({ history: [] });
+        await saveHistoryToDB([]);
+    },
     showHistoryDropdown: false,
     setShowHistoryDropdown: (show) => set({ showHistoryDropdown: show }),
     _progressListener: null,
@@ -97,12 +197,11 @@ export const useStore = create((set, get) => ({
     performUrlScan: async () => {
         const { urlInput, authConfig, crawlDepth, requestBudget } = get();
         if (!urlInput.trim()) {
-            set({ error: 'Vui lòng nhập URL mục tiêu', scanResult: null });
+            set({ error: 'Vui lòng nhập URL mục tiêu' });
             return;
         }
         get().clearProgress();
-        set({ isLoading: true, error: null, scanResult: null });
-        // Register progress listener and keep ref for cleanup
+        set({ isLoading: true, error: null, urlScanResult: null, urlScanIsLocal: false });
         try {
             const cb = (ev) => get().appendProgress(ev);
             window.owaspWorkbench?.onScanProgress?.(cb);
@@ -114,14 +213,16 @@ export const useStore = create((set, get) => ({
         try {
             const result = await ipc().scanUrl({ url: urlInput, auth: authConfig, maxDepth: crawlDepth, maxBudget: requestBudget });
             if (result.ok) {
-                set({ scanResult: result, error: null });
+                const local = isLocalUrl(urlInput);
+                set({ urlScanResult: result, urlScanIsLocal: local, error: null });
                 get().saveToHistory(result);
             }
-            else
-                set({ error: result.error || 'Scan thất bại', scanResult: null });
+            else {
+                set({ error: result.error || 'Scan thất bại' });
+            }
         }
         catch (err) {
-            set({ error: (err instanceof Error ? err.message : String(err)) || 'Lỗi không xác định', scanResult: null });
+            set({ error: (err instanceof Error ? err.message : String(err)) || 'Lỗi không xác định' });
         }
         finally {
             try {
@@ -137,11 +238,11 @@ export const useStore = create((set, get) => ({
     performProjectScan: async () => {
         const { selectedFolder } = get();
         if (!selectedFolder) {
-            set({ error: 'Vui lòng chọn thư mục project', scanResult: null });
+            set({ error: 'Vui lòng chọn thư mục project' });
             return;
         }
         get().clearProgress();
-        set({ isLoading: true, error: null, scanResult: null });
+        set({ isLoading: true, error: null, projectScanResult: null });
         try {
             const cb = (ev) => get().appendProgress(ev);
             window.owaspWorkbench?.onScanProgress?.(cb);
@@ -153,14 +254,14 @@ export const useStore = create((set, get) => ({
         try {
             const result = await ipc().scanProject(selectedFolder);
             if (result.ok) {
-                set({ scanResult: result, error: null });
+                set({ projectScanResult: result, error: null });
                 get().saveToHistory(result);
             }
             else
-                set({ error: result.error || 'Scan thất bại', scanResult: null });
+                set({ error: result.error || 'Scan thất bại' });
         }
         catch (err) {
-            set({ error: (err instanceof Error ? err.message : String(err)) || 'Lỗi không xác định', scanResult: null });
+            set({ error: (err instanceof Error ? err.message : String(err)) || 'Lỗi không xác định' });
         }
         finally {
             try {
@@ -199,12 +300,20 @@ export const useStore = create((set, get) => ({
                 set({ checklist: r.data });
         }
         catch (err) {
-            console.warn('Checklist unavailable:', err.message);
+            console.warn('Checklist unavailable:', err instanceof Error ? err.message : String(err));
         }
     },
-    resetScan: () => set({ scanResult: null, error: null }),
+    resetScan: () => {
+        if (get().activeTab === 'url')
+            set({ urlScanResult: null, urlScanIsLocal: false, error: null });
+        else
+            set({ projectScanResult: null, checkedChecklistItems: [], error: null });
+    },
+    resetUrlScanResult: () => set({ urlScanResult: null, urlScanIsLocal: false, error: null }),
+    resetProjectScanResult: () => set({ projectScanResult: null, checkedChecklistItems: [], error: null }),
     exportReport: async (format) => {
-        const { scanResult } = get();
+        const { urlScanResult, projectScanResult, activeTab } = get();
+        const scanResult = activeTab === 'url' ? urlScanResult : projectScanResult;
         if (!scanResult) {
             set({ error: 'Không có kết quả scan để xuất báo cáo' });
             return;
@@ -219,3 +328,4 @@ export const useStore = create((set, get) => ({
         }
     },
 }));
+useStore.getState().loadHistory();

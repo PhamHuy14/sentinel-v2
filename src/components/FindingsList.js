@@ -10,7 +10,8 @@ const severityColor = (sev) => {
     }
 };
 export const FindingsList = () => {
-    const { scanResult, error, isLoading } = useStore();
+    const { urlScanResult, projectScanResult, activeTab, error, isLoading } = useStore();
+    const scanResult = activeTab === 'url' ? urlScanResult : projectScanResult;
     if (isLoading) {
         return (_jsxs("div", { className: "card findings-panel", children: [_jsx("div", { className: "loading-spinner" }), _jsx("p", { children: "Scanning in progress..." })] }));
     }

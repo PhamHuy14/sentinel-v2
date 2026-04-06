@@ -237,19 +237,19 @@ export const ResultsPanel: React.FC = () => {
         <div className="filter-bar-right">
           <span className="filter-count">{visible.length}/{findings.length}</span>
           {hasFilter && (
-            <button className="btn-reset" onClick={resetFilters}>
+            <button className="btn-reset" onClick={resetFilters} title="Reset all filters">
               <span className="btn-reset-icon">↺</span> Reset
             </button>
           )}
           <button
             className="btn-reset btn-clear-results"
-            title="Clear scan results and start over"
+            title={`Clear ${activeTab === 'url' ? 'URL' : 'Project'} scan results and start over`}
             onClick={() => {
               if (activeTab === 'url') resetUrlScanResult();
               else resetProjectScanResult();
             }}
           >
-            <span>✕ Clear</span>
+            ✕ Clear
           </button>
         </div>
       </div>

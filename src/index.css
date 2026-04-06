@@ -146,6 +146,12 @@ body {
   height: 100%;
 }
 
+.checklist-right-panel {
+  /* Layout handled mostly by inline-styles inside ChecklistRightPanel.tsx */
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
 .left-panel {
   display: flex;
   flex-direction: column;
@@ -582,17 +588,25 @@ textarea { resize: vertical; min-height: 56px; font-size: 12px; }
   gap: 10px;
 }
 
-.empty-state .empty-icon { font-size: 28px; opacity: 0.3; filter: grayscale(1); }
-.empty-state p { font-size: 12.5px; max-width: 260px; line-height: 1.6; color: var(--text-2); }
+.empty-state .empty-icon { font-size: 32px; opacity: 0.35; filter: grayscale(1); margin-bottom: 4px; }
+.empty-state p { font-size: 12.5px; max-width: 280px; line-height: 1.6; color: var(--text-2); }
 
 .error-bar {
   background: var(--crit-bg);
   border: 1px solid var(--crit-b);
   border-radius: var(--r-md);
-  padding: 10px 14px;
-  font-size: 12px;
+  padding: 12px 16px;
+  font-size: 12.5px;
   color: var(--crit);
   line-height: 1.5;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.error-bar::before {
+  content: '⚠';
+  flex-shrink: 0;
+  font-size: 14px;
 }
 
 /* ── Scan Overlay ────────────────────────────────────────────── */
@@ -998,18 +1012,20 @@ textarea { resize: vertical; min-height: 56px; font-size: 12px; }
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  background: rgba(224, 82, 96, 0.08);
-  border: 1px solid rgba(224, 82, 96, 0.25);
-  font-size: 11px;
+  gap: 6px;
+  background: rgba(224, 82, 96, 0.1);
+  border: 1px solid rgba(224, 82, 96, 0.35);
+  font-size: 11.5px;
   color: var(--crit);
   cursor: pointer;
-  padding: 5px 10px;
+  padding: 6px 12px;
   border-radius: var(--r-sm);
-  transition: all 0.15s ease;
+  transition: all 0.18s ease;
   line-height: 1;
-  font-weight: 500;
+  font-weight: 600;
   white-space: nowrap;
+  letter-spacing: 0.01em;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
 }
 
 .btn-history-clear:hover {
@@ -1017,11 +1033,15 @@ textarea { resize: vertical; min-height: 56px; font-size: 12px; }
   color: #fff;
   border-color: var(--crit);
   transform: none;
-  box-shadow: 0 2px 8px rgba(224, 82, 96, 0.3);
+  box-shadow: 0 3px 12px rgba(224, 82, 96, 0.4), inset 0 1px 0 rgba(255,255,255,0.1);
+}
+
+.btn-history-clear:active {
+  transform: scale(0.97);
 }
 
 .btn-history-clear-icon {
-  font-size: 11px;
+  font-size: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1034,21 +1054,26 @@ textarea { resize: vertical; min-height: 56px; font-size: 12px; }
   width: 28px;
   height: 28px;
   color: var(--text-2);
-  background: transparent;
-  border: 1px solid var(--border);
+  background: var(--bg-input);
+  border: 1px solid rgba(255,255,255,0.12);
   border-radius: var(--r-md);
   cursor: pointer;
-  font-size: 14px;
-  transition: all 0.15s ease;
+  font-size: 13px;
+  transition: all 0.18s ease;
   font-weight: 600;
+  flex-shrink: 0;
 }
 
 .btn-history-close:hover {
   background: var(--bg-hover);
   color: var(--text);
-  border-color: var(--accent);
+  border-color: rgba(255,255,255,0.25);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
   transform: none;
-  box-shadow: none;
+}
+
+.btn-history-close:active {
+  transform: scale(0.93);
 }
 
 .hist-hdr-title {
@@ -1059,10 +1084,14 @@ textarea { resize: vertical; min-height: 56px; font-size: 12px; }
 }
 
 .hist-empty {
-  padding: 24px;
+  padding: 28px 24px;
   text-align: center;
   font-size: 12px;
   color: var(--text-3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
 }
 
 .hist-list {
@@ -1124,14 +1153,16 @@ textarea { resize: vertical; min-height: 56px; font-size: 12px; }
   gap: 6px;
   flex-wrap: wrap;
   overflow-x: auto;
-  padding: 12px 0;
   position: sticky;
   top: 0;
-  z-index: 20;
-  background: var(--bg);
+  z-index: 30;
+  background: rgba(12, 14, 23, 0.96);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--border-dim);
+  border-top: 1px solid rgba(255,255,255,0.03);
   margin: 0 -20px;
-  padding: 12px 20px;
+  padding: 10px 20px;
 }
 
 .search-input {
@@ -1611,24 +1642,256 @@ textarea { resize: vertical; min-height: 56px; font-size: 12px; }
 .btn-checklist-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
+  gap: 5px;
+  padding: 5px 11px;
   border: 1px solid var(--border);
   border-radius: var(--r-sm);
-  background: transparent;
+  background: var(--bg-input);
   color: var(--text-2);
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
-  transition: all 0.12s;
+  transition: all 0.15s ease;
   font-family: inherit;
   transform: none !important;
   box-shadow: none !important;
+  letter-spacing: 0.01em;
 }
 
 .btn-checklist-toggle:hover {
   border-color: var(--accent);
   color: var(--accent);
   background: var(--accent-dim);
+}
+
+.btn-checklist-toggle:active {
+  transform: scale(0.97) !important;
+}
+
+/* ── Animations ──────────────────────────────────────────────── */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.finding-card {
+  animation: fadeInUp 0.18s ease both;
+}
+
+.hist-dropdown {
+  animation: slideInRight 0.15s ease both;
+}
+
+/* ── Improved finding card hover ─────────────────────────────── */
+.finding-card:hover {
+  border-color: var(--border);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.25);
+}
+
+.finding-card.sev-critical:hover { box-shadow: 0 2px 14px rgba(224,82,96,0.12); }
+.finding-card.sev-high:hover     { box-shadow: 0 2px 14px rgba(217,124,64,0.12); }
+.finding-card.sev-medium:hover   { box-shadow: 0 2px 14px rgba(200,168,50,0.12); }
+
+/* ── Focus visible ───────────────────────────────────────────── */
+button { outline: none; }
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── Scrollbar polish ────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
+
+/* ── Checklist Section Header (label + toggle side-by-side) ─── */
+.chk-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+/* ── Checklist Items List ────────────────────────────────────── */
+.chk-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+/* ── Expandable Checklist Item ───────────────────────────────── */
+.chk-item-expandable {
+  border: 1px solid var(--border-dim);
+  border-radius: var(--r-sm);
+  background: var(--bg-input);
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+
+.chk-item-expandable:hover {
+  border-color: var(--border);
+}
+
+.chk-item-expandable.chk-item-done {
+  opacity: 0.6;
+}
+
+.chk-item-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  padding: 8px 10px;
+}
+
+.chk-item-label-wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex: 1;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.chk-item-text {
+  font-size: 12.5px;
+  color: var(--text-2);
+  line-height: 1.45;
+  flex: 1;
+}
+
+.chk-item-text-done {
+  text-decoration: line-through;
+  color: var(--text-3);
+}
+
+.chk-expand-btn {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-3);
+  font-size: 8px;
+  cursor: pointer;
+  padding: 2px 4px;
+  margin-left: 6px;
+  margin-top: 2px;
+  border-radius: var(--r-sm);
+  transition: all 0.12s;
+  line-height: 1;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.chk-expand-btn:hover {
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.chk-expand-btn.open {
+  color: var(--accent);
+}
+
+/* ── Item Detail Panel ───────────────────────────────────────── */
+.chk-item-detail {
+  border-top: 1px solid var(--border-dim);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--bg-card);
+  animation: fadeInUp 0.15s ease both;
+}
+
+.chk-detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chk-detail-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+/* ── Todo list ───────────────────────────────────────────────── */
+.chk-todo-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0;
+  margin: 0;
+}
+
+.chk-todo-item {
+  font-size: 11.5px;
+  color: var(--text-2);
+  line-height: 1.45;
+  padding: 4px 8px 4px 22px;
+  position: relative;
+  background: var(--bg-input);
+  border-radius: var(--r-sm);
+  border-left: 2px solid var(--border);
+}
+
+.chk-todo-item::before {
+  content: '→';
+  position: absolute;
+  left: 7px;
+  color: var(--text-3);
+  font-size: 10px;
+  top: 5px;
+}
+
+/* ── Recommendation box ──────────────────────────────────────── */
+.chk-recommend-text {
+  font-size: 11.5px;
+  color: var(--text-2);
+  line-height: 1.55;
+  padding: 8px 10px;
+  background: var(--accent-dim);
+  border: 1px solid rgba(61,106,242,0.2);
+  border-radius: var(--r-sm);
+  border-left: 3px solid var(--accent);
+}
+
+/* ── Checklist tab layout override ──────────────────────────────────────────
+   Tab Checklist dùng cùng workspace grid nhưng right panel được mở rộng
+   và có internal 2-column layout cho Design Review + Scan summary.
+   Left panel giữ nguyên 280px với OWASP grid + Context checklist.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* workspace-checklist: cùng grid như workspace gốc, không cần override */
+.workspace-checklist {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  overflow: hidden;
+  height: 100%;
+}
+
+/* Right panel trong checklist tab: overflow scroll bình thường */
+.checklist-right-panel {
+  overflow-y: auto;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Responsive: trên màn hình nhỏ hơn 1100px, Design Review 2 cột
+   bên trong right panel sẽ xuống 1 cột */
+@media (max-width: 1100px) {
+  .checklist-right-panel > div > div[style*="grid-template-columns"] {
+    grid-template-columns: 1fr !important;
+  }
 }

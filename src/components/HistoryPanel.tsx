@@ -29,15 +29,13 @@ export const HistoryPanel: React.FC = () => {
       <div className="hist-dropdown">
         <div className="hist-hdr">
           <span className="hist-hdr-title">Scan History</span>
-          <div
-            className="hist-hdr-actions"
-            style={{ display: 'flex', gap: 8, alignItems: 'center' }}
-          >
+          <div className="hist-hdr-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {history.length > 0 && (
               <button
                 className="btn-history-clear"
-                onClick={clearHistory}
-                title="Delete all history entries"
+                onClick={() => { if (window.confirm('Xoá toàn bộ lịch sử scan?')) clearHistory(); }}
+                title="Xoá toàn bộ lịch sử — không thể hoàn tác"
+                aria-label="Clear all history"
               >
                 <span className="btn-history-clear-icon">🗑</span>
                 <span>Clear All</span>
@@ -46,8 +44,8 @@ export const HistoryPanel: React.FC = () => {
             <button
               className="btn-history-close"
               onClick={() => setShowHistoryDropdown(false)}
-              title="Close history panel"
-              aria-label="Close"
+              title="Đóng panel lịch sử"
+              aria-label="Close history panel"
             >
               ✕
             </button>
@@ -55,19 +53,31 @@ export const HistoryPanel: React.FC = () => {
         </div>
 
         {history.length === 0 ? (
-          <div className="hist-empty">No scan history yet</div>
+          <div className="hist-empty">
+            <div style={{ fontSize: 24, opacity: 0.3, marginBottom: 6 }}>🕐</div>
+            <div>No scan history yet</div>
+            <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 4 }}>
+              Completed scans will appear here
+            </div>
+          </div>
         ) : (
           <div className="hist-list">
             {history.map((entry) => {
               const { bySeverity, total } = entry.summary;
               return (
-                <button key={entry.id} className="hist-entry" onClick={() => restoreFromHistory(entry.id)}>
+                <button
+                  key={entry.id}
+                  className="hist-entry"
+                  onClick={() => restoreFromHistory(entry.id)}
+                  title={`Restore: ${entry.target}`}
+                >
                   <div className="hist-entry-top">
-                    <span className="hist-entry-mode">{entry.mode === 'url-scan' ? '🌐' : '📁'}</span>
+                    <span className="hist-entry-mode" title={entry.mode === 'url-scan' ? 'URL Scan' : 'Project Scan'}>
+                      {entry.mode === 'url-scan' ? '🌐' : '📁'}
+                    </span>
                     <span className="hist-entry-target">{entry.target}</span>
                     <span className="hist-entry-time">{timeAgo(entry.ts)}</span>
                   </div>
-
                   <div className="hist-entry-bottom">
                     <div className="hist-entry-chips">
                       {(bySeverity.critical || 0) > 0 && <span className="sev-chip chip-crit">{bySeverity.critical} CRIT</span>}
@@ -76,10 +86,12 @@ export const HistoryPanel: React.FC = () => {
                       {(bySeverity.low      || 0) > 0 && <span className="sev-chip chip-low">{bySeverity.low} LOW</span>}
                       {total === 0 && <span className="sev-chip chip-info">Clean ✓</span>}
                     </div>
-
-                    {/* Risk score trend indicator */}
                     {entry.riskScore !== undefined && (
-                      <div className="hist-risk-score" style={{ color: riskScoreColor(entry.riskScore) }}>
+                      <div
+                        className="hist-risk-score"
+                        style={{ color: riskScoreColor(entry.riskScore) }}
+                        title={`Risk score: ${entry.riskScore}/100`}
+                      >
                         Risk {entry.riskScore}
                       </div>
                     )}
@@ -87,6 +99,19 @@ export const HistoryPanel: React.FC = () => {
                 </button>
               );
             })}
+          </div>
+        )}
+
+        {history.length > 0 && (
+          <div style={{
+            padding: '8px 14px',
+            borderTop: '1px solid var(--border-dim)',
+            fontSize: 10,
+            color: 'var(--text-3)',
+            textAlign: 'center',
+            fontFamily: 'var(--mono)',
+          }}>
+            {history.length}/10 entries · Click to restore
           </div>
         )}
       </div>

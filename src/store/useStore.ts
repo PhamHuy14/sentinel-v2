@@ -1,40 +1,120 @@
 import { create } from 'zustand';
-import { AuthConfig, ChecklistData, ScanHistoryEntry, ScanProgressEvent, ScanResult } from '../types';
+import { AuthConfig, ChecklistData, Finding, ScanHistoryEntry, ScanProgressEvent, ScanResult } from '../types';
 
 const HISTORY_KEY  = 'sentinel_v2_history';
 const MAX_HISTORY  = 10;
-const MAX_LOG      = 200; // limit progressLog to avoid memory growth
+const MAX_LOG      = 200;
 
-// ── LocalStorage helpers ──────────────────────────────────────────────────────
-function loadHistoryFromStorage(): ScanHistoryEntry[] {
-  try {
-    const raw = localStorage.getItem(HISTORY_KEY) || '[]';
-    const entries: ScanHistoryEntry[] = JSON.parse(raw);
-    return entries;
-  } catch (_e) { return []; }
+// ── IndexedDB helpers ──────────────────────────────────────────────────────
+const DB_NAME = 'SentinelV2DB';
+const STORE_NAME = 'historyStore';
+
+function openDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      if (!req.result.objectStoreNames.contains(STORE_NAME)) {
+        req.result.createObjectStore(STORE_NAME);
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
 }
 
-function saveHistoryToStorage(h: ScanHistoryEntry[]) {
+async function loadHistoryFromDB(): Promise<ScanHistoryEntry[]> {
   try {
-    const slim = h.map(e => ({
-      ...e,
-      scanResult: {
-        ...e.scanResult,
-        findings: e.scanResult.findings.slice(0, 100),
-      },
-    }));
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(slim));
+    const db = await openDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const req = tx.objectStore(STORE_NAME).get(HISTORY_KEY);
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => resolve([]);
+    });
   } catch (_e) {
     try {
-      const trimmed = h.slice(0, Math.max(1, Math.floor(h.length / 2)));
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(trimmed));
-    } catch (_e2) { void 0; }
+      const raw = localStorage.getItem(HISTORY_KEY) || '[]';
+      return JSON.parse(raw);
+    } catch { return []; }
+  }
+}
+
+async function saveHistoryToDB(h: ScanHistoryEntry[]) {
+  try {
+    const db = await openDB();
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).put(h, HISTORY_KEY);
+  } catch (_e) {
+    try {
+      const slim = h.map(e => ({
+        ...e,
+        scanResult: {
+          ...e.scanResult,
+          findings: e.scanResult.findings.slice(0, 50),
+        },
+      }));
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(slim.slice(0, Math.max(1, Math.floor(slim.length / 2)))));
+    } catch { void 0; }
   }
 }
 
 function calcRiskScore(findings: ScanResult['findings']): number {
   const SEV_W: Record<string, number> = { critical: 10, high: 7, medium: 4, low: 1 };
   return Math.min(100, findings.reduce((s, f) => s + (SEV_W[f.severity] || 0), 0));
+}
+
+/**
+ * Kiểm tra URL có phải local/localhost không.
+ * Local URL → kết quả scan được dùng để tạo checklist.
+ * Public URL → không đưa vào checklist.
+ */
+export function isLocalUrl(url: string): boolean {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    const h = parsed.hostname.toLowerCase();
+    return (
+      h === 'localhost' ||
+      h === '127.0.0.1' ||
+      h === '::1' ||
+      h.endsWith('.localhost') ||
+      // Private IPv4 ranges
+      /^10\./.test(h) ||
+      /^192\.168\./.test(h) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(h)
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Gộp findings từ URL scan (local) và Project scan, loại bỏ trùng lặp.
+ * Hai finding được coi là trùng nếu có cùng ruleId + owaspCategory + severity.
+ */
+export function mergeFindings(urlFindings: Finding[], projectFindings: Finding[]): Finding[] {
+  const seen = new Set<string>();
+  const result: Finding[] = [];
+
+  const makeKey = (f: Finding) => `${f.ruleId}||${f.owaspCategory}||${f.severity}`;
+
+  for (const f of urlFindings) {
+    const key = makeKey(f);
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.push(f);
+    }
+  }
+
+  for (const f of projectFindings) {
+    const key = makeKey(f);
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.push(f);
+    }
+  }
+
+  return result;
 }
 
 const ipc = () => {
@@ -49,6 +129,15 @@ interface AppState {
   urlScanResult: ScanResult | null;
   projectScanResult: ScanResult | null;
   error: string | null;
+
+  /** true nếu URL scan hiện tại là local/localhost → dùng để tạo checklist */
+  urlScanIsLocal: boolean;
+
+  /**
+   * Trả về merged findings từ cả URL scan (nếu local) + Project scan.
+   * Dùng cho ChecklistPanel để tạo checklist đầy đủ.
+   */
+  getCombinedFindings: () => Finding[];
 
   checkedChecklistItems: string[];
   toggleChecklistItem: (id: string) => void;
@@ -73,10 +162,10 @@ interface AppState {
   clearProgress: () => void;
 
   history: ScanHistoryEntry[];
-  loadHistory: () => void;
-  saveToHistory: (result: ScanResult) => void;
+  loadHistory: () => Promise<void>;
+  saveToHistory: (result: ScanResult) => Promise<void>;
   restoreFromHistory: (id: string) => void;
-  clearHistory: () => void;
+  clearHistory: () => Promise<void>;
 
   showHistoryDropdown: boolean;
   setShowHistoryDropdown: (show: boolean) => void;
@@ -91,7 +180,6 @@ interface AppState {
   resetProjectScanResult: () => void;
   exportReport: (format: 'json' | 'html') => Promise<void>;
 
-  // Track current listener ref for proper cleanup
   _progressListener: ((_e: ScanProgressEvent) => void) | null;
 }
 
@@ -103,6 +191,14 @@ export const useStore = create<AppState>((set, get) => ({
   urlScanResult: null,
   projectScanResult: null,
   error: null,
+  urlScanIsLocal: false,
+
+  getCombinedFindings: () => {
+    const { urlScanResult, projectScanResult, urlScanIsLocal } = get();
+    const urlFindings   = urlScanIsLocal ? (urlScanResult?.findings ?? []) : [];
+    const projFindings  = projectScanResult?.findings ?? [];
+    return mergeFindings(urlFindings, projFindings);
+  },
 
   checkedChecklistItems: [],
   toggleChecklistItem: (id) => set((s) => ({
@@ -129,15 +225,18 @@ export const useStore = create<AppState>((set, get) => ({
   progressLog: [],
   appendProgress: (ev) => set((s) => ({
     progressLog: s.progressLog.length >= MAX_LOG
-      ? [...s.progressLog.slice(-MAX_LOG + 1), ev]  // rolling window
+      ? [...s.progressLog.slice(-MAX_LOG + 1), ev]
       : [...s.progressLog, ev],
   })),
   clearProgress: () => set({ progressLog: [] }),
 
-  history: loadHistoryFromStorage(),
-  loadHistory: () => set({ history: loadHistoryFromStorage() }),
+  history: [],
+  loadHistory: async () => {
+    const data = await loadHistoryFromDB();
+    set({ history: data });
+  },
 
-  saveToHistory: (result) => {
+  saveToHistory: async (result) => {
     const riskScore = calcRiskScore(result.findings);
     const entry: ScanHistoryEntry = {
       id:       Date.now().toString(),
@@ -148,22 +247,26 @@ export const useStore = create<AppState>((set, get) => ({
       summary:  { total: result.metadata.summary.total, bySeverity: result.metadata.summary.bySeverity },
       scanResult: result,
     };
-    const updated = [entry, ...loadHistoryFromStorage()].slice(0, MAX_HISTORY);
-    saveHistoryToStorage(updated);
+    const updated = [entry, ...get().history].slice(0, MAX_HISTORY);
     set({ history: updated });
+    await saveHistoryToDB(updated);
   },
 
   restoreFromHistory: (id) => {
     const entry = get().history.find((e) => e.id === id);
     if (entry) {
       if (entry.mode === 'url-scan') {
-        set({ urlScanResult: entry.scanResult, activeTab: 'url', error: null, showHistoryDropdown: false });
+        const local = isLocalUrl(entry.scanResult.scannedUrl || '');
+        set({ urlScanResult: entry.scanResult, urlScanIsLocal: local, activeTab: 'url', error: null, showHistoryDropdown: false });
       } else {
         set({ projectScanResult: entry.scanResult, activeTab: 'project', error: null, showHistoryDropdown: false });
       }
     }
   },
-  clearHistory: () => { saveHistoryToStorage([]); set({ history: [] }); },
+  clearHistory: async () => {
+    set({ history: [] });
+    await saveHistoryToDB([]);
+  },
 
   showHistoryDropdown: false,
   setShowHistoryDropdown: (show) => set({ showHistoryDropdown: show }),
@@ -175,9 +278,8 @@ export const useStore = create<AppState>((set, get) => ({
     const { urlInput, authConfig, crawlDepth, requestBudget } = get();
     if (!urlInput.trim()) { set({ error: 'Vui lòng nhập URL mục tiêu' }); return; }
     get().clearProgress();
-    set({ isLoading: true, error: null, urlScanResult: null });
+    set({ isLoading: true, error: null, urlScanResult: null, urlScanIsLocal: false });
 
-    // Register progress listener and keep ref for cleanup
     try {
       const cb = (ev: ScanProgressEvent) => get().appendProgress(ev);
       window.owaspWorkbench?.onScanProgress?.(cb);
@@ -186,8 +288,13 @@ export const useStore = create<AppState>((set, get) => ({
 
     try {
       const result = await ipc().scanUrl({ url: urlInput, auth: authConfig, maxDepth: crawlDepth, maxBudget: requestBudget });
-      if (result.ok) { set({ urlScanResult: result, error: null }); get().saveToHistory(result); }
-      else set({ error: result.error || 'Scan thất bại' });
+      if (result.ok) {
+        const local = isLocalUrl(urlInput);
+        set({ urlScanResult: result, urlScanIsLocal: local, error: null });
+        get().saveToHistory(result);
+      } else {
+        set({ error: result.error || 'Scan thất bại' });
+      }
     } catch (err: Error | unknown) {
       set({ error: (err instanceof Error ? err.message : String(err)) || 'Lỗi không xác định' });
     } finally {
@@ -247,11 +354,11 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   resetScan: () => {
-    if (get().activeTab === 'url') set({ urlScanResult: null, error: null });
+    if (get().activeTab === 'url') set({ urlScanResult: null, urlScanIsLocal: false, error: null });
     else set({ projectScanResult: null, checkedChecklistItems: [], error: null });
   },
 
-  resetUrlScanResult: () => set({ urlScanResult: null, error: null }),
+  resetUrlScanResult: () => set({ urlScanResult: null, urlScanIsLocal: false, error: null }),
   resetProjectScanResult: () => set({ projectScanResult: null, checkedChecklistItems: [], error: null }),
 
   exportReport: async (format) => {
@@ -266,3 +373,5 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 }));
+
+useStore.getState().loadHistory();
