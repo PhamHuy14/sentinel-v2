@@ -166,9 +166,14 @@ body {
 .right-panel {
   overflow-y: auto;
   padding: 16px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+  display: block;
+}
+
+.right-panel > * {
+  margin-bottom: 14px;
+}
+.right-panel > *:last-child {
+  margin-bottom: 0;
 }
 
 /* ── Sections ───────────────────────────────────────────────── */
@@ -1152,16 +1157,15 @@ textarea { resize: vertical; min-height: 56px; font-size: 12px; }
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
-  overflow-x: auto;
   position: sticky;
-  top: 0;
+  top: -16px;
   z-index: 30;
   background: rgba(12, 14, 23, 0.96);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--border-dim);
   border-top: 1px solid rgba(255,255,255,0.03);
-  margin: 0 -20px;
+  margin: 0 -20px 14px -20px !important;
   padding: 10px 20px;
 }
 

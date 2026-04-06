@@ -115,7 +115,7 @@ export const ResultsPanel: React.FC = () => {
   const hasFilter = catFilter !== 'all' || filterSev !== 'all' || filterCol !== 'all' || searchQ !== '';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 14 }}>
+    <>
       {/* Risk Dashboard */}
       <div style={{ flexShrink: 0 }}>
         <RiskDashboard scanResult={scanResult} />
@@ -205,7 +205,7 @@ export const ResultsPanel: React.FC = () => {
       </div>
 
       {/* Advanced filter bar */}
-      <div className="filter-bar-adv">
+      <div className="filter-bar-adv" style={{ flexShrink: 0 }}>
         <input
           type="text" className="search-input" placeholder="🔍 Search findings…"
           value={searchQ} onChange={(e) => setSearchQ(e.target.value)}
@@ -265,6 +265,6 @@ export const ResultsPanel: React.FC = () => {
           {visible.map((f, i) => <FindingCard key={i} f={f} />)}
         </div>
       )}
-    </div>
+    </>
   );
 };
