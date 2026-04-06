@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { Finding } from '../types';
 
@@ -60,18 +60,24 @@ function sevBg(sev: string | null): string {
   return 'var(--low-bg)';
 }
 
-const CheckboxItem: React.FC<{ id: string; label: string }> = ({ id, label }) => {
+const CheckboxItemWithFilter: React.FC<{ id: string; label: string; hideCompleted: boolean }> = ({ id, label, hideCompleted }) => {
   const { checkedChecklistItems, toggleChecklistItem } = useStore();
   const checked = checkedChecklistItems.includes(id);
+
+  // Hide this item if it's checked and hideCompleted is true
+  if (hideCompleted && checked) {
+    return null;
+  }
+
   return (
-    <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', cursor: 'pointer', marginBottom: 6 }}>
-      <input 
-        type="checkbox" 
-        checked={checked} 
-        onChange={() => toggleChecklistItem(id)} 
-        style={{ marginTop: 3, cursor: 'pointer' }}
+    <label className={`chk-checkbox-item ${checked ? 'checked' : ''}`}>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={() => toggleChecklistItem(id)}
+        className="chk-checkbox-input"
       />
-      <span style={{ opacity: checked ? 0.6 : 1, textDecoration: checked ? 'line-through' : 'none', flex: 1, fontSize: 13, color: 'var(--text-2)' }}>
+      <span className="chk-checkbox-label">
         {label}
       </span>
     </label>
@@ -80,6 +86,7 @@ const CheckboxItem: React.FC<{ id: string; label: string }> = ({ id, label }) =>
 
 export const ChecklistPanel: React.FC = () => {
   const { checklist, loadChecklist, projectScanResult } = useStore();
+  const [hideCompleted, setHideCompleted] = useState(false);
 
   useEffect(() => {
     loadChecklist();
@@ -168,32 +175,41 @@ export const ChecklistPanel: React.FC = () => {
       {/* Context-Based Project Checklist */}
       {hasProjectScan && projectScan.metadata?.techStack && projectScan.metadata.techStack.length > 0 && (
         <div className="section" style={{ marginTop: '16px' }}>
-          <div className="section-label">Context-Based Checklist</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <div className="section-label">Context-Based Checklist</div>
+            <button
+              className="btn-checklist-toggle"
+              onClick={() => setHideCompleted(!hideCompleted)}
+              title={hideCompleted ? 'Show completed items' : 'Hide completed items'}
+            >
+              {hideCompleted ? '👁️ Show' : '🙈 Hide'} Completed
+            </button>
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
             {projectScan.metadata.techStack.includes('Node.js') || projectScan.metadata.techStack.includes('React') || projectScan.metadata.techStack.includes('Next.js') ? (
               <>
-                <CheckboxItem id="chk-node-0" label="Check NPM packages for known vulnerabilities (npm audit)." />
-                <CheckboxItem id="chk-node-1" label="Verify JWT secret management and token expiration." />
-                <CheckboxItem id="chk-node-2" label="Ensure CORS is configured correctly for React/Next.js APIs." />
-                <CheckboxItem id="chk-node-3" label="Check for hardcoded secrets in `.env` files and `.js` source code." />
+                <CheckboxItemWithFilter id="chk-node-0" label="Check NPM packages for known vulnerabilities (npm audit)." hideCompleted={hideCompleted} />
+                <CheckboxItemWithFilter id="chk-node-1" label="Verify JWT secret management and token expiration." hideCompleted={hideCompleted} />
+                <CheckboxItemWithFilter id="chk-node-2" label="Ensure CORS is configured correctly for React/Next.js APIs." hideCompleted={hideCompleted} />
+                <CheckboxItemWithFilter id="chk-node-3" label="Check for hardcoded secrets in `.env` files and `.js` source code." hideCompleted={hideCompleted} />
               </>
             ) : null}
             {projectScan.metadata.techStack.includes('Spring Boot') || projectScan.metadata.techStack.includes('Java') ? (
               <>
-                <CheckboxItem id="chk-java-0" label="Verify Spring Actuator endpoints are properly secured and not exposing `/env` or `/heapdump`." />
-                <CheckboxItem id="chk-java-1" label="Check Maven/Gradle dependencies for known vulnerabilities." />
-                <CheckboxItem id="chk-java-2" label="Ensure proper validation for Spring Data REST endpoints." />
+                <CheckboxItemWithFilter id="chk-java-0" label="Verify Spring Actuator endpoints are properly secured and not exposing `/env` or `/heapdump`." hideCompleted={hideCompleted} />
+                <CheckboxItemWithFilter id="chk-java-1" label="Check Maven/Gradle dependencies for known vulnerabilities." hideCompleted={hideCompleted} />
+                <CheckboxItemWithFilter id="chk-java-2" label="Ensure proper validation for Spring Data REST endpoints." hideCompleted={hideCompleted} />
               </>
             ) : null}
             {projectScan.metadata.techStack.includes('PHP') || projectScan.metadata.techStack.includes('Laravel') ? (
               <>
-                <CheckboxItem id="chk-php-0" label="Verify `APP_DEBUG` is false in production `.env`." />
-                <CheckboxItem id="chk-php-1" label="Check for open debugbar or telescope routes." />
-                <CheckboxItem id="chk-php-2" label="Ensure proper file upload validation to prevent RCE." />
+                <CheckboxItemWithFilter id="chk-php-0" label="Verify `APP_DEBUG` is false in production `.env`." hideCompleted={hideCompleted} />
+                <CheckboxItemWithFilter id="chk-php-1" label="Check for open debugbar or telescope routes." hideCompleted={hideCompleted} />
+                <CheckboxItemWithFilter id="chk-php-2" label="Ensure proper file upload validation to prevent RCE." hideCompleted={hideCompleted} />
               </>
             ) : null}
             {/* Generic item if no specific match, or common items */}
-            <CheckboxItem id="chk-generic-0" label={`Review ${projectScan.metadata.techStack.join(', ')} specific configurations.`} />
+            <CheckboxItemWithFilter id="chk-generic-0" label={`Review ${projectScan.metadata.techStack.join(', ')} specific configurations.`} hideCompleted={hideCompleted} />
           </div>
         </div>
       )}
@@ -201,9 +217,10 @@ export const ChecklistPanel: React.FC = () => {
       {/* Design Review questions — always shown */}
       {checklist?.designQuestions && checklist.designQuestions.length > 0 && (
         <div className="section">
+          <div className="section-label">Design Review</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
             {checklist.designQuestions.map((q, i) => (
-              <CheckboxItem key={`design-${i}`} id={`design-${i}`} label={q} />
+              <CheckboxItemWithFilter key={`design-${i}`} id={`design-${i}`} label={q} hideCompleted={hideCompleted} />
             ))}
           </div>
         </div>

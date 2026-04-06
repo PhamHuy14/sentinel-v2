@@ -29,13 +29,28 @@ export const HistoryPanel: React.FC = () => {
       <div className="hist-dropdown">
         <div className="hist-hdr">
           <span className="hist-hdr-title">Scan History</span>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <div
+            className="hist-hdr-actions"
+            style={{ display: 'flex', gap: 8, alignItems: 'center' }}
+          >
             {history.length > 0 && (
-              <button className="btn-history-clear" onClick={clearHistory}>
-                Clear all
+              <button
+                className="btn-history-clear"
+                onClick={clearHistory}
+                title="Delete all history entries"
+              >
+                <span className="btn-history-clear-icon">🗑</span>
+                <span>Clear All</span>
               </button>
             )}
-            <button className="btn-history-close" onClick={() => setShowHistoryDropdown(false)}>✕</button>
+            <button
+              className="btn-history-close"
+              onClick={() => setShowHistoryDropdown(false)}
+              title="Close history panel"
+              aria-label="Close"
+            >
+              ✕
+            </button>
           </div>
         </div>
 

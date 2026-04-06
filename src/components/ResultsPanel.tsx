@@ -69,7 +69,7 @@ const FindingCard: React.FC<{ f: Finding }> = ({ f }) => {
 };
 
 export const ResultsPanel: React.FC = () => {
-  const { urlScanResult, projectScanResult, error, isLoading, activeTab } = useStore();
+  const { urlScanResult, projectScanResult, error, isLoading, activeTab, resetUrlScanResult, resetProjectScanResult } = useStore();
 
   // Advanced filter / sort state
   const [sortBy,      setSortBy]      = useState<'severity' | 'confidence' | 'collector'>('severity');
@@ -205,7 +205,7 @@ export const ResultsPanel: React.FC = () => {
       </div>
 
       {/* Advanced filter bar */}
-      <div className="filter-bar-adv" style={{ flexShrink: 0, position: 'static', margin: 0, padding: '0 0 10px 0', borderBottom: '1px solid var(--border-dim)' }}>
+      <div className="filter-bar-adv">
         <input
           type="text" className="search-input" placeholder="🔍 Search findings…"
           value={searchQ} onChange={(e) => setSearchQ(e.target.value)}
@@ -241,6 +241,16 @@ export const ResultsPanel: React.FC = () => {
               <span className="btn-reset-icon">↺</span> Reset
             </button>
           )}
+          <button
+            className="btn-reset btn-clear-results"
+            title="Clear scan results and start over"
+            onClick={() => {
+              if (activeTab === 'url') resetUrlScanResult();
+              else resetProjectScanResult();
+            }}
+          >
+            <span>✕ Clear</span>
+          </button>
         </div>
       </div>
 

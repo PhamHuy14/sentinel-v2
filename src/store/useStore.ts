@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { ScanResult, AuthConfig, ChecklistData, ScanProgressEvent, ScanHistoryEntry } from '../types';
+import { AuthConfig, ChecklistData, ScanHistoryEntry, ScanProgressEvent, ScanResult } from '../types';
 
 const HISTORY_KEY  = 'sentinel_v2_history';
 const MAX_HISTORY  = 10;
@@ -87,6 +87,8 @@ interface AppState {
   stopScan: () => Promise<void>;
   loadChecklist: () => Promise<void>;
   resetScan: () => void;
+  resetUrlScanResult: () => void;
+  resetProjectScanResult: () => void;
   exportReport: (format: 'json' | 'html') => Promise<void>;
 
   // Track current listener ref for proper cleanup
@@ -104,7 +106,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   checkedChecklistItems: [],
   toggleChecklistItem: (id) => set((s) => ({
-    checkedChecklistItems: s.checkedChecklistItems.includes(id) 
+    checkedChecklistItems: s.checkedChecklistItems.includes(id)
       ? s.checkedChecklistItems.filter(i => i !== id)
       : [...s.checkedChecklistItems, id]
   })),
@@ -248,6 +250,9 @@ export const useStore = create<AppState>((set, get) => ({
     if (get().activeTab === 'url') set({ urlScanResult: null, error: null });
     else set({ projectScanResult: null, checkedChecklistItems: [], error: null });
   },
+
+  resetUrlScanResult: () => set({ urlScanResult: null, error: null }),
+  resetProjectScanResult: () => set({ projectScanResult: null, checkedChecklistItems: [], error: null }),
 
   exportReport: async (format) => {
     const { urlScanResult, projectScanResult, activeTab } = get();

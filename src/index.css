@@ -995,40 +995,60 @@ textarea { resize: vertical; min-height: 56px; font-size: 12px; }
 }
 
 .btn-history-clear {
-  background: transparent;
-  border: none;
-  font-size: 11.5px;
-  color: var(--text-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background: rgba(224, 82, 96, 0.08);
+  border: 1px solid rgba(224, 82, 96, 0.25);
+  font-size: 11px;
+  color: var(--crit);
   cursor: pointer;
-  padding: 4px 8px;
+  padding: 5px 10px;
   border-radius: var(--r-sm);
   transition: all 0.15s ease;
   line-height: 1;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .btn-history-clear:hover {
-  text-decoration: underline;
-  color: var(--text-2);
+  background: var(--crit);
+  color: #fff;
+  border-color: var(--crit);
+  transform: none;
+  box-shadow: 0 2px 8px rgba(224, 82, 96, 0.3);
+}
+
+.btn-history-clear-icon {
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .btn-history-close {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   color: var(--text-2);
   background: transparent;
-  border: none;
-  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
   cursor: pointer;
   font-size: 14px;
   transition: all 0.15s ease;
+  font-weight: 600;
 }
 
 .btn-history-close:hover {
   background: var(--bg-hover);
   color: var(--text);
+  border-color: var(--accent);
+  transform: none;
+  box-shadow: none;
 }
 
 .hist-hdr-title {
@@ -1102,15 +1122,16 @@ textarea { resize: vertical; min-height: 56px; font-size: 12px; }
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   overflow-x: auto;
-  padding: 12px 20px;
+  padding: 12px 0;
   position: sticky;
-  top: -16px;
-  z-index: 10;
+  top: 0;
+  z-index: 20;
   background: var(--bg);
-  margin: 0 -20px;
   border-bottom: 1px solid var(--border-dim);
+  margin: 0 -20px;
+  padding: 12px 20px;
 }
 
 .search-input {
@@ -1433,6 +1454,16 @@ textarea { resize: vertical; min-height: 56px; font-size: 12px; }
   display: inline-block;
 }
 
+.btn-clear-results {
+  border-color: rgba(224, 82, 96, 0.25);
+  color: var(--crit);
+}
+.btn-clear-results:hover {
+  border-color: var(--crit);
+  background: rgba(224, 82, 96, 0.1);
+  color: var(--crit);
+}
+
 /* ── Filter bar right group ─────────────────────────────────── */
 .filter-bar-right {
   display: flex;
@@ -1542,3 +1573,62 @@ textarea { resize: vertical; min-height: 56px; font-size: 12px; }
 .chk-empty-icon { font-size: 18px; flex-shrink: 0; }
 .chk-empty-hint p { font-size: 11.5px; color: var(--text-2); line-height: 1.5; }
 .chk-empty-hint strong { color: var(--accent); }
+/* -- Checkbox Items in Checklist ----------------------------- */
+.chk-checkbox-item {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  cursor: pointer;
+  margin-bottom: 6px;
+  padding: 5px 0;
+  transition: opacity 0.15s;
+}
+
+.chk-checkbox-item.checked {
+  opacity: 0.65;
+}
+
+.chk-checkbox-input {
+  margin-top: 3px;
+  cursor: pointer;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+
+.chk-checkbox-label {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.4;
+}
+
+.chk-checkbox-item.checked .chk-checkbox-label {
+  text-decoration: line-through;
+  color: var(--text-3);
+}
+
+/* Toggle button for show/hide completed */
+.btn-checklist-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.12s;
+  font-family: inherit;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.btn-checklist-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-dim);
+}
