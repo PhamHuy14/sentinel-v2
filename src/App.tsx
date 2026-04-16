@@ -6,6 +6,7 @@ import { ChecklistRightPanel } from './components/ChecklistRightPanel';
 import { ScanProgress } from './components/ScanProgress';
 import { ResultsPanel } from './components/ResultsPanel';
 import { HistoryPanel } from './components/HistoryPanel';
+import { AIChatWidget } from './components/AIChatWidget';
 
 function App() {
   const {
@@ -79,6 +80,8 @@ function App() {
           </main>
         </div>
       )}
+      {/* AI Chat Widget — floating overlay, visible on all tabs */}
+      <AIChatWidget />
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { useStore } from '../store/useStore';
 import { Finding } from '../types';
 import { ReportExportButton } from './ReportExportButton';
 import { RiskDashboard } from './RiskDashboard';
+import { useAIStore } from '../store/useAIStore';
 
 const sevClass  = (s: string) => `sev-${s}`;
 const tagClass  = (s: string) => `tag-${s}`;
@@ -14,9 +15,16 @@ const CONF_ORDER: Record<string, number> = { high: 3, medium: 2, low: 1 };
 
 const FindingCard: React.FC<{ f: Finding }> = ({ f }) => {
   const [open, setOpen] = useState(false);
+  const { setAIPendingFinding, setAIChatOpen } = useAIStore();
   const isFuzzer   = f.collector === 'active-fuzzer';
   const payloadLine= f.evidence.find((e) => e.startsWith('Payload:'));
   const evidenceLines = f.evidence.filter((e) => !e.startsWith('Payload:'));
+
+  const handleAskAI = (e: React.MouseEvent) => {
+    e.stopPropagation(); // không trigger expand
+    setAIPendingFinding(f);
+    setAIChatOpen(true);
+  };
 
   return (
     <div className={`finding-card ${sevClass(f.severity)}`}>
@@ -27,6 +35,16 @@ const FindingCard: React.FC<{ f: Finding }> = ({ f }) => {
           <span className="badge badge-cat">{f.owaspCategory}</span>
           {isFuzzer && <span className="badge badge-fuzzer">fuzzer</span>}
         </div>
+        <button
+          className="btn-ask-ai"
+          onClick={handleAskAI}
+          title="Phân tích finding này với AI"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          Hỏi AI
+        </button>
         <span className={`expand-caret ${open ? 'open' : ''}`}>▶</span>
       </div>
 
@@ -34,16 +52,16 @@ const FindingCard: React.FC<{ f: Finding }> = ({ f }) => {
         <div className="finding-detail">
           <div style={{ display: 'flex', gap: 12 }}>
             <div style={{ flex: 1 }}>
-              <div className="detail-label">Location</div>
+              <div className="detail-label">Vị trí</div>
               <div className="detail-mono">{f.target || f.location}</div>
             </div>
             <div>
-              <div className="detail-label">Confidence</div>
+              <div className="detail-label">Độ tin cậy</div>
               <span className={`conf-badge ${confClass(f.confidence)}`}>{f.confidence}</span>
             </div>
           </div>
           <div>
-            <div className="detail-label">Rule ID</div>
+            <div className="detail-label">Mã rule</div>
             <div className="detail-mono" style={{ color: 'var(--text-3)', fontSize: 11 }}>{f.ruleId}</div>
           </div>
           {isFuzzer && payloadLine && (
@@ -54,13 +72,21 @@ const FindingCard: React.FC<{ f: Finding }> = ({ f }) => {
           )}
           {evidenceLines.length > 0 && (
             <div>
-              <div className="detail-label">Evidence</div>
+              <div className="detail-label">Bằng chứng</div>
               {evidenceLines.map((e, i) => <div key={i} className="detail-evidence" style={{ marginBottom: 3 }}>{e}</div>)}
             </div>
           )}
           <div>
-            <div className="detail-label">Remediation</div>
+            <div className="detail-label">Khuyến nghị khắc phục</div>
             <div className="detail-fix">{f.remediation}</div>
+          </div>
+          <div style={{ paddingTop: 4 }}>
+            <button className="btn-ask-ai btn-ask-ai--detail" onClick={handleAskAI}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+              Phân tích chi tiết &amp; hướng dẫn khắc phục
+            </button>
           </div>
         </div>
       )}
@@ -71,7 +97,7 @@ const FindingCard: React.FC<{ f: Finding }> = ({ f }) => {
 export const ResultsPanel: React.FC = () => {
   const { urlScanResult, projectScanResult, error, isLoading, activeTab, resetUrlScanResult, resetProjectScanResult } = useStore();
 
-  // Advanced filter / sort state
+  // Trạng thái lọc / sắp xếp nâng cao
   const [sortBy,      setSortBy]      = useState<'severity' | 'confidence' | 'collector'>('severity');
   const [filterSev,   setFilterSev]   = useState('all');
   const [filterCol,   setFilterCol]   = useState('all');
@@ -87,7 +113,7 @@ export const ResultsPanel: React.FC = () => {
     return (
       <div className="empty-state">
         <div className="empty-icon">◎</div>
-        <p>Vui lòng chọn mục tiêu và nhấn &quot;Start Scan&quot; để bắt đầu ở chế độ <b>{activeTab === 'url' ? 'URL Scan' : 'Project Scan'}</b>.</p>
+        <p>Vui lòng chọn mục tiêu và nhấn &quot;Bắt đầu quét&quot; để khởi động chế độ <b>{activeTab === 'url' ? 'Quét URL' : 'Quét dự án'}</b>.</p>
       </div>
     );
   }
@@ -96,7 +122,7 @@ export const ResultsPanel: React.FC = () => {
   const summary = metadata.summary;
   const cats = Array.from(new Set(findings.map((f) => f.owaspCategory))).sort();
 
-  // Build filtered + sorted list
+  // Tạo danh sách đã lọc và sắp xếp
   const visible = findings
     .filter((f) => catFilter   === 'all' || f.owaspCategory === catFilter)
     .filter((f) => filterSev   === 'all' || f.severity      === filterSev)
@@ -116,19 +142,19 @@ export const ResultsPanel: React.FC = () => {
 
   return (
     <>
-      {/* Risk Dashboard */}
+      {/* Bảng điều khiển rủi ro */}
       <div style={{ flexShrink: 0 }}>
         <RiskDashboard scanResult={scanResult} />
       </div>
 
-      {/* Scan Info + Summary side-by-side */}
+      {/* Thông tin scan + tổng quan */}
       <div className="results-info-row">
-        {/* Left: Scan meta */}
+        {/* Bên trái: metadata scan */}
         <div className="section results-info-meta">
-          <div className="section-label">Scan Info</div>
+          <div className="section-label">Thông tin scan</div>
           <div className="meta-table">
             <div className="meta-row">
-              <span className="meta-key">Target</span>
+              <span className="meta-key">Mục tiêu</span>
               <span className="meta-val" title={scanResult.target || scannedUrl}>
                 {scanResult.target || scannedUrl || '—'}
               </span>
@@ -136,62 +162,62 @@ export const ResultsPanel: React.FC = () => {
             {scanResult.mode === 'url-scan' && (
               <>
                 {finalUrl && finalUrl !== scannedUrl && (
-                  <div className="meta-row"><span className="meta-key">Final URL</span><span className="meta-val">{finalUrl}</span></div>
+                  <div className="meta-row"><span className="meta-key">URL cuối cùng</span><span className="meta-val">{finalUrl}</span></div>
                 )}
                 {status && (
                   <div className="meta-row">
-                    <span className="meta-key">HTTP Status</span>
+                    <span className="meta-key">Trạng thái HTTP</span>
                     <span className={`meta-val ${httpColor(status)}`}>{status}</span>
                   </div>
                 )}
-                {title && <div className="meta-row"><span className="meta-key">Page Title</span><span className="meta-val">{title}</span></div>}
+                {title && <div className="meta-row"><span className="meta-key">Tiêu đề trang</span><span className="meta-val">{title}</span></div>}
                 {metadata.crawledEndpointsCount !== undefined && (
-                  <div className="meta-row"><span className="meta-key">Crawled URLs</span><span className="meta-val">{metadata.crawledEndpointsCount}</span></div>
+                  <div className="meta-row"><span className="meta-key">URL đã crawl</span><span className="meta-val">{metadata.crawledEndpointsCount}</span></div>
                 )}
                 {metadata.formsDetected !== undefined && (
-                  <div className="meta-row"><span className="meta-key">Forms</span><span className="meta-val">{metadata.formsDetected}</span></div>
+                  <div className="meta-row"><span className="meta-key">Biểu mẫu</span><span className="meta-val">{metadata.formsDetected}</span></div>
                 )}
               </>
             )}
             {scanResult.mode === 'project-scan' && (
               <>
                 {metadata.scannedFiles !== undefined && (
-                  <div className="meta-row"><span className="meta-key">Files Scanned</span><span className="meta-val">{metadata.scannedFiles}</span></div>
+                  <div className="meta-row"><span className="meta-key">Số file đã quét</span><span className="meta-val">{metadata.scannedFiles}</span></div>
                 )}
                 {metadata.packageJsonFound !== undefined && (
                   <div className="meta-row">
                     <span className="meta-key">package.json</span>
                     <span className={`meta-val ${metadata.packageJsonFound ? 'ok' : 'warn'}`}>
-                      {metadata.packageJsonFound ? 'Found' : 'Not found'}
+                      {metadata.packageJsonFound ? 'Có' : 'Không có'}
                     </span>
                   </div>
                 )}
                 {metadata.configCount !== undefined && (
-                  <div className="meta-row"><span className="meta-key">Config Files</span><span className="meta-val">{metadata.configCount}</span></div>
+                  <div className="meta-row"><span className="meta-key">File cấu hình</span><span className="meta-val">{metadata.configCount}</span></div>
                 )}
                 {metadata.csprojCount !== undefined && metadata.csprojCount > 0 && (
-                  <div className="meta-row"><span className="meta-key">.csproj Files</span><span className="meta-val">{metadata.csprojCount}</span></div>
+                  <div className="meta-row"><span className="meta-key">File .csproj</span><span className="meta-val">{metadata.csprojCount}</span></div>
                 )}
                 {metadata.techStack && metadata.techStack.length > 0 && (
                   <div className="meta-row">
-                    <span className="meta-key">Tech Stack</span>
+                    <span className="meta-key">Ngăn xếp công nghệ</span>
                     <span className="meta-val">{metadata.techStack.join(', ')}</span>
                   </div>
                 )}
               </>
             )}
             <div className="meta-row">
-              <span className="meta-key">Total Findings</span>
+              <span className="meta-key">Tổng số findings</span>
               <span className="meta-val">{metadata.summary.total}</span>
             </div>
           </div>
         </div>
 
-        {/* Right: Summary numbers + export */}
+        {/* Bên phải: tổng quan và xuất báo cáo */}
         <div className="section results-info-summary">
-          <div className="section-label">Summary</div>
+          <div className="section-label">Tổng quan</div>
           <div className="results-count">{summary.total}</div>
-          <div className="results-title">Total Findings</div>
+          <div className="results-title">Tổng số findings</div>
           <div className="sev-chips">
             {cnt('critical') > 0 && <span className="sev-chip chip-crit">CRIT {cnt('critical')}</span>}
             {cnt('high')     > 0 && <span className="sev-chip chip-high">HIGH {cnt('high')}</span>}
@@ -204,61 +230,61 @@ export const ResultsPanel: React.FC = () => {
         </div>
       </div>
 
-      {/* Advanced filter bar */}
+      {/* Thanh lọc nâng cao */}
       <div className="filter-bar-adv" style={{ flexShrink: 0 }}>
         <input
-          type="text" className="search-input" placeholder="🔍 Search findings…"
+          type="text" className="search-input" placeholder="🔍 Tìm findings…"
           value={searchQ} onChange={(e) => setSearchQ(e.target.value)}
         />
         <select className="filter-select" value={filterSev} onChange={(e) => setFilterSev(e.target.value)}>
-          <option value="all">All severity</option>
+          <option value="all">Tất cả mức độ</option>
           <option value="critical">Critical</option>
           <option value="high">High</option>
           <option value="medium">Medium</option>
           <option value="low">Low</option>
         </select>
         <select className="filter-select" value={filterCol} onChange={(e) => setFilterCol(e.target.value)}>
-          <option value="all">All collectors</option>
-          <option value="blackbox">Blackbox</option>
+          <option value="all">Tất cả collector</option>
+          <option value="blackbox">Black-box</option>
           <option value="active-fuzzer">Fuzzer</option>
-          <option value="source">Source</option>
+          <option value="source">Mã nguồn</option>
         </select>
         {cats.length > 1 && (
           <select className="filter-select" value={catFilter} onChange={(e) => setCatFilter(e.target.value)}>
-            <option value="all">All categories</option>
+            <option value="all">Tất cả danh mục</option>
             {cats.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         )}
         <select className="filter-select" value={sortBy} onChange={(e) => setSortBy(e.target.value as 'severity' | 'confidence' | 'collector')}>
-          <option value="severity">Sort: Severity</option>
-          <option value="confidence">Sort: Confidence</option>
-          <option value="collector">Sort: Collector</option>
+          <option value="severity">Sắp xếp: Mức độ</option>
+          <option value="confidence">Sắp xếp: Độ tin cậy</option>
+          <option value="collector">Sắp xếp: Collector</option>
         </select>
         <div className="filter-bar-right">
           <span className="filter-count">{visible.length}/{findings.length}</span>
           {hasFilter && (
-            <button className="btn-reset" onClick={resetFilters} title="Reset all filters">
-              <span className="btn-reset-icon">↺</span> Reset
+            <button className="btn-reset" onClick={resetFilters} title="Đặt lại toàn bộ bộ lọc">
+              <span className="btn-reset-icon">↺</span> Đặt lại
             </button>
           )}
           <button
             className="btn-reset btn-clear-results"
-            title={`Clear ${activeTab === 'url' ? 'URL' : 'Project'} scan results and start over`}
+            title={`Xóa kết quả ${activeTab === 'url' ? 'quét URL' : 'quét dự án'} và bắt đầu lại`}
             onClick={() => {
               if (activeTab === 'url') resetUrlScanResult();
               else resetProjectScanResult();
             }}
           >
-            ✕ Clear
+            ✕ Xóa
           </button>
         </div>
       </div>
 
-      {/* Findings list */}
+      {/* Danh sách findings */}
       {visible.length === 0 ? (
         <div className="empty-state" style={{ minHeight: 160 }}>
           <div className="empty-icon">✓</div>
-          <p>{hasFilter ? 'No findings match current filters.' : 'No issues found.'}</p>
+          <p>{hasFilter ? 'Không có finding nào khớp với bộ lọc hiện tại.' : 'Không phát hiện vấn đề nào.'}</p>
         </div>
       ) : (
         <div className="findings-list">

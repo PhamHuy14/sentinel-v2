@@ -2,7 +2,7 @@ function normalizeFinding(partial = {}) {
   return {
     ruleId: partial.ruleId || 'UNKNOWN',
     owaspCategory: partial.owaspCategory || 'A00',
-    title: partial.title || 'Unknown finding',
+    title: partial.title || 'Finding không xác định',
     severity: partial.severity || 'low',
     confidence: partial.confidence || 'medium',
     target: partial.target || '',
@@ -10,7 +10,7 @@ function normalizeFinding(partial = {}) {
     evidence: Array.isArray(partial.evidence) ? partial.evidence : [String(partial.evidence || '')].filter(Boolean),
     remediation: partial.remediation || '',
     references: Array.isArray(partial.references) ? partial.references : [partial.references].filter(Boolean),
-    collector: partial.collector || 'unknown'
+    collector: partial.collector || 'không rõ'
   };
 }
 

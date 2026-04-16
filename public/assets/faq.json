@@ -1,0 +1,29 @@
+[
+  {
+    "id": "faq_what_is_sentinel",
+    "keywords": [
+      "sentinel là gì",
+      "tool là gì",
+      "ứng dụng này",
+      "phần mềm này",
+      "công cụ này",
+      "giới thiệu"
+    ],
+    "question": "SENTINEL là gì?",
+    "answer": "## SENTINEL v2 là gì?\n\nSENTINEL v2 là công cụ kiểm thử bảo mật web theo chuẩn **OWASP Top 10 — 2025**, chạy trực tiếp trên máy dưới dạng Electron app. Mục tiêu là giúp developer và sinh viên học bảo mật theo chuẩn quốc tế một cách thực hành, không cần kết nối internet.\n\n**Hai chế độ scan chính:**\n- **URL Scan**: Kiểm thử black-box — gửi HTTP request thực tế đến target URL để phát hiện lỗ hổng runtime\n- **Project Scan**: Phân tích source code tĩnh — không chạy code, không kết nối mạng, tìm lỗ hổng trong code và dependencies\n\n**Điểm nổi bật:**\n- Hoạt động hoàn toàn offline\n- Phát hiện lỗ hổng theo chuẩn OWASP\n- Xuất báo cáo HTML/JSON\n- Lưu lịch sử scan tự động"
+  },
+  {
+    "id": "faq_how_to_use",
+    "keywords": [
+      "cách dùng",
+      "cách sử dụng",
+      "hướng dẫn",
+      "bắt đầu",
+      "bước đầu",
+      "sử dụng như thế nào",
+      "làm thế nào"
+    ],
+    "question": "Cách sử dụng SENTINEL cơ bản?",
+    "answer": "## Quy trình sử dụng SENTINEL\n\n**Bước 1 — Chọn chế độ scan**\nChọn tab **URL Scan** (kiểm thử website) hoặc **Project Scan** (kiểm thử source code) trên thanh điều hướng.\n\n**Bước 2 — Nhập mục tiêu**\n- URL Scan: nhập URL đầy đủ, ví dụ `https://example.com`\n- Project Scan: nhấn Browse để chọn thư mục gốc dự án\n\n**Bước 3 — Cấu hình**\n- **Crawl Depth**: độ sâu duyệt link (0, 1 hoặc 2)\n- **Request Budget**: số request tối đa (60 là cân bằng tốt)\n- **Authentication**: thêm cookie hoặc token nếu cần\n\n**Bước 4 — Chạy scan**\nNhấn **Start Scan** và theo dõi tiến trình realtime.\n\n**Bước 5 — Xem kết quả**\nFindings hiển thị ở panel phải, sắp xếp theo mức độ nguy hiểm. Nhấn vào finding để xem chi tiết và hướng dẫn khắc phục."
+  }
+]

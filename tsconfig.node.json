@@ -1,14 +1,18 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022"],
-    "module": "CommonJS",
-    "moduleResolution": "node",
+    "lib": ["ES2022", "DOM"],
+    "module": "Node16",
+    "moduleResolution": "Node16",
     "strict": true,
+    "ignoreDeprecations": "5.0",
+    "skipLibCheck": true,
+
     "outDir": "./dist-ts",
     "baseUrl": ".",
     "composite": true,
     "allowJs": true,
+    "resolveJsonModule": true,
     "paths": {
       "@engine/*": ["engine/*"]
     }

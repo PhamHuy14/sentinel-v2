@@ -2,16 +2,16 @@ import React, { useState } from 'react';
 import { useStore } from '../store/useStore';
 
 const DEPTH_OPTIONS = [
-  { value: 0, label: '0 — Index only', desc: 'Only scan the main URL' },
-  { value: 1, label: '1 level',        desc: 'Follow links 1 level deep (recommended)' },
-  { value: 2, label: '2 levels',       desc: 'Deeper crawl — slower, more surface coverage' },
+  { value: 0, label: '0 — Chỉ URL gốc', desc: 'Chỉ quét URL chính' },
+  { value: 1, label: '1 cấp',           desc: 'Theo các liên kết sâu 1 cấp (khuyến nghị)' },
+  { value: 2, label: '2 cấp',           desc: 'Crawl sâu hơn, chậm hơn nhưng bao phủ nhiều bề mặt hơn' },
 ];
 
 const BUDGET_OPTIONS = [
-  { value: 30,  label: '30 requests',  desc: 'Fast scan, essential checks' },
-  { value: 60,  label: '60 requests',  desc: 'Balanced — recommended' },
-  { value: 100, label: '100 requests', desc: 'Thorough — more injection tests' },
-  { value: 200, label: '200 requests', desc: 'Deep dive — best coverage, slowest' },
+  { value: 30,  label: '30 yêu cầu',  desc: 'Quét nhanh, các kiểm tra cốt lõi' },
+  { value: 60,  label: '60 yêu cầu',  desc: 'Cân bằng, khuyến nghị sử dụng' },
+  { value: 100, label: '100 yêu cầu', desc: 'Quét kỹ hơn, nhiều bài test injection hơn' },
+  { value: 200, label: '200 yêu cầu', desc: 'Quét chuyên sâu, bao phủ tốt nhất nhưng chậm nhất' },
 ];
 
 export const UrlScanForm: React.FC = () => {
@@ -25,7 +25,7 @@ export const UrlScanForm: React.FC = () => {
   return (
     <>
       <div className="section">
-        <div className="section-label">Target</div>
+        <div className="section-label">Mục tiêu</div>
 
         <div className="field">
           <label className="field-label">URL</label>
@@ -42,7 +42,7 @@ export const UrlScanForm: React.FC = () => {
               <button
                 type="button"
                 className="btn-clear"
-                title="Clear URL"
+                title="Xóa URL"
                 disabled={isLoading}
                 onClick={() => setUrlInput('')}
               >
@@ -54,8 +54,8 @@ export const UrlScanForm: React.FC = () => {
 
         <div className="field-row">
           <div className="field">
-            <label className="field-label">
-              Crawl Depth
+            <label className="field-label field-label-inline">
+              Độ sâu crawl
               <span className="field-help" title={DEPTH_OPTIONS.find(o => o.value === crawlDepth)?.desc}>?</span>
             </label>
             <select value={crawlDepth} onChange={(e) => setCrawlDepth(Number(e.target.value))} disabled={isLoading}>
@@ -63,8 +63,8 @@ export const UrlScanForm: React.FC = () => {
             </select>
           </div>
           <div className="field">
-            <label className="field-label">
-              Request Budget
+            <label className="field-label field-label-inline">
+              Số lượng request
               <span className="field-help" title={BUDGET_OPTIONS.find(o => o.value === requestBudget)?.desc}>?</span>
             </label>
             <select value={requestBudget} onChange={(e) => setRequestBudget(Number(e.target.value))} disabled={isLoading}>
@@ -73,13 +73,13 @@ export const UrlScanForm: React.FC = () => {
           </div>
         </div>
 
-        {/* Scan profile hint */}
+        {/* Gợi ý cấu hình scan */}
         <div className="scan-profile-hint">
           {crawlDepth >= 2 || requestBudget >= 100
-            ? '🔴 Thorough scan — may take 60–120s'
+            ? '🔴 Quét kỹ — có thể mất 60–120 giây'
             : crawlDepth === 1 && requestBudget >= 60
-            ? '🟡 Balanced scan — ~30–60s'
-            : '🟢 Quick scan — ~10–30s'}
+            ? '🟡 Quét cân bằng — khoảng 30–60 giây'
+            : '🟢 Quét nhanh — khoảng 10–30 giây'}
         </div>
       </div>
 
@@ -89,7 +89,7 @@ export const UrlScanForm: React.FC = () => {
           className={`collapsible-btn ${showAuth ? 'open' : ''}`}
           onClick={() => setShowAuth(!showAuth)}
         >
-          <span>Authentication</span>
+          <span>Xác thực</span>
           <span className={`collapsible-icon ${showAuth ? 'open' : ''}`}>▶</span>
         </button>
 
@@ -101,17 +101,17 @@ export const UrlScanForm: React.FC = () => {
                 value={authConfig.cookie} onChange={(e) => setAuthConfig({ cookie: e.target.value })} disabled={isLoading} />
             </div>
             <div className="field">
-              <label className="field-label">Bearer Token</label>
+              <label className="field-label">Token Bearer</label>
               <input type="text" placeholder="eyJhbGci..."
                 value={authConfig.bearerToken} onChange={(e) => setAuthConfig({ bearerToken: e.target.value })} disabled={isLoading} />
             </div>
             <div className="field">
-              <label className="field-label">Authorization Header</label>
+              <label className="field-label">Header Authorization</label>
               <input type="text" placeholder="Basic dXNlcjpwYXNz"
                 value={authConfig.authorization} onChange={(e) => setAuthConfig({ authorization: e.target.value })} disabled={isLoading} />
             </div>
             <div className="field">
-              <label className="field-label">Custom Headers (JSON)</label>
+              <label className="field-label">Header tùy chỉnh (JSON)</label>
               <textarea
                 placeholder='{"X-API-Key": "abc123"}'
                 value={typeof authConfig.customHeaders === 'string'
@@ -126,7 +126,7 @@ export const UrlScanForm: React.FC = () => {
       </div>
 
       <button className="btn-primary" onClick={performUrlScan} disabled={isLoading}>
-        {isLoading ? 'Scanning…' : 'Start Scan'}
+        {isLoading ? 'Đang quét…' : 'Bắt đầu quét'}
       </button>
     </>
   );

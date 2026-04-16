@@ -41,7 +41,7 @@ function runPackageLockConsistency(context) {
         target: context.packageJsonPath,
         location: 'package-lock.json',
         evidence: [`Packages thiếu integrity: ${noIntegrityPkgs.join(', ')}`],
-        remediation: 'Chạy `npm ci` thay vì `npm install`. npm ci verify integrity hash mỗi package.',
+        remediation: 'Chạy `npm ci` thay vì `npm install`. `npm ci` sẽ kiểm tra integrity hash của từng package.',
         references: ['https://owasp.org/Top10/2025/A03_2025-Software_Supply_Chain_Failures/'],
         collector: 'source'
       }));
@@ -80,7 +80,7 @@ function runTyposquattingRisk(context) {
             target: context.packageJsonPath,
             location: `dependency: ${typo}`,
             evidence: [`"${typo}" trông giống typo của package phổ biến "${legit}"`],
-            remediation: `Kiểm tra package "${typo}" là intentional hay typo. Nếu cần "${legit}", fix tên và chạy npm install lại.`,
+            remediation: `Kiểm tra package "${typo}" là chủ đích hay chỉ là gõ nhầm. Nếu thực ra cần "${legit}", hãy sửa tên và chạy lại npm install.`,
             references: ['https://owasp.org/Top10/2025/A03_2025-Software_Supply_Chain_Failures/'],
             collector: 'source'
           }));
@@ -91,7 +91,7 @@ function runTyposquattingRisk(context) {
   return findings;
 }
 
-// ─── A08: CI/CD Security ──────────────────────────────────────────────────────
+// ─── A08: Bảo mật CI/CD ───────────────────────────────────────────────────────
 
 function runCiCdSecurityGates(context) {
   const findings = [];
@@ -106,13 +106,13 @@ function runCiCdSecurityGates(context) {
     findings.push(normalizeFinding({
       ruleId: 'A08-CI-001',
       owaspCategory: 'A08',
-      title: 'CI/CD pipeline không thấy SAST security scan',
+      title: 'Pipeline CI/CD không có dấu hiệu chạy SAST',
       severity: 'medium',
       confidence: 'low',
       target: ciFiles[0]?.path || 'CI config',
       location: 'CI/CD pipeline',
-      evidence: ['Không phát hiện SAST tool (Semgrep, SonarQube, ESLint Security) trong CI workflow'],
-      remediation: 'Tích hợp SAST vào CI pipeline. Semgrep free tier cho small teams. Block merge nếu SAST fail.',
+      evidence: ['Không phát hiện công cụ SAST (Semgrep, SonarQube, ESLint Security) trong workflow CI'],
+      remediation: 'Tích hợp SAST vào pipeline CI. Có thể dùng Semgrep cho team nhỏ và chặn merge khi SAST thất bại.',
       references: ['https://owasp.org/Top10/2025/A08_2025-Software_or_Data_Integrity_Failures/'],
       collector: 'source'
     }));
@@ -122,13 +122,13 @@ function runCiCdSecurityGates(context) {
     findings.push(normalizeFinding({
       ruleId: 'A08-CI-002',
       owaspCategory: 'A08',
-      title: 'CI/CD pipeline không thấy dependency vulnerability scan',
+      title: 'Pipeline CI/CD không có bước quét lỗ hổng dependency',
       severity: 'medium',
       confidence: 'low',
       target: ciFiles[0]?.path || 'CI config',
       location: 'CI/CD pipeline',
-      evidence: ['Không phát hiện npm audit, Snyk, hoặc Dependabot trong CI workflow'],
-      remediation: 'Thêm `npm audit --audit-level=high` hoặc Snyk vào CI. Dùng Dependabot (GitHub) cho auto PR.',
+      evidence: ['Không phát hiện npm audit, Snyk hoặc Dependabot trong workflow CI'],
+      remediation: 'Thêm `npm audit --audit-level=high` hoặc Snyk vào CI. Có thể dùng Dependabot trên GitHub để tạo PR tự động.',
       references: ['https://owasp.org/Top10/2025/A08_2025-Software_or_Data_Integrity_Failures/'],
       collector: 'source'
     }));
@@ -158,7 +158,7 @@ function runSensitiveDataInLogs(context) {
           target: file.path,
           location: file.path,
           evidence: logLines.slice(0, 2).map(l => l.trim().slice(0, 100)),
-          remediation: 'Không bao giờ log password, token, secret. Dùng masking: log chỉ 4 ký tự đầu + "***".',
+          remediation: 'Không bao giờ ghi log password, token hoặc secret. Dùng masking, ví dụ chỉ giữ 4 ký tự đầu + "***".',
           references: ['https://owasp.org/Top10/2025/A09_2025-Security_Logging_and_Alerting_Failures/'],
           collector: 'source'
         }));
@@ -180,13 +180,13 @@ function runStructuredLogging(context) {
     return [normalizeFinding({
       ruleId: 'A09-STRUCT-001',
       owaspCategory: 'A09',
-      title: 'Sử dụng console.log thay vì structured logger',
+      title: 'Sử dụng console.log thay vì logger có cấu trúc',
       severity: 'low',
       confidence: 'low',
       target: 'project source',
       location: 'codebase',
       evidence: ['Phát hiện console.log nhưng không thấy winston/pino/bunyan hoặc tương đương'],
-      remediation: 'Dùng winston hoặc pino thay console.log. JSON-format logs dễ search trong SIEM.',
+      remediation: 'Dùng winston hoặc pino thay cho console.log. Log dạng JSON sẽ dễ tìm kiếm và tích hợp SIEM hơn.',
       references: ['https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html'],
       collector: 'source'
     })];

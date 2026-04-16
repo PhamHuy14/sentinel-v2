@@ -3,7 +3,11 @@
 
 const PATTERNS = {
   EMAIL:  /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/,
-  URL:    /^https?:\/\/[^\s]+$|^\/[^\s]+$/,
+  // BUG FIX: Phiên bản cũ: /^https?:\/\/[^\s]+$|^\/[^\s]+$/
+  // Phần `^\/[^\s]+$` khớp BẤT KỲ chuỗi nào bắt đầu bằng `/` (Unix path như /etc/passwd, /home/user, ...)
+  // → các param path-traversal value bị phân loại là 'url' thay vì 'path', gây mất payload path traversal.
+  // FIX: Chỉ match http(s):// URLs. Để key-name hints quyết định khi value là relative path.
+  URL:    /^https?:\/\/[^\s]+$/,
   TOKEN:  /^[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+$|^[A-Fa-f0-9]{32,64}$/,
   NUMBER: /^-?\d+(\.\d+)?$/,
 };
@@ -14,7 +18,7 @@ const KEY_HINTS = {
   TOKEN:    ['token', 'jwt', 'auth', 'key', 'session', 'hash', 'apikey', 'api_key', 'secret'],
   NUMBER:   ['id', 'page', 'limit', 'count', 'offset', 'index', 'num', 'pid', 'uid', 'cid'],
   TEXT:     ['search', 'q', 'query', 'name', 'desc', 'description', 'title', 'msg', 'message', 'comment', 'content', 'text', 'input', 'keyword'],
-  PATH:     ['path', 'file', 'filename', 'dir', 'folder', 'read', 'load', 'include', 'require', 'download', 'doc', 'document',  'attachment', 'view', 'page', 'template'],
+  PATH:     ['path', 'file', 'filename', 'dir', 'folder', 'read', 'load', 'include', 'require', 'download', 'doc', 'document', 'attachment', 'view', 'page', 'template'],
   TEMPLATE: ['template', 'tpl', 'view', 'layout', 'format', 'render'],
   CMD:      ['cmd', 'exec', 'command', 'run', 'ping', 'host', 'ip', 'addr', 'address'],
 };

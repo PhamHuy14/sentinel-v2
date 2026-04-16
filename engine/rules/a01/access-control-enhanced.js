@@ -15,8 +15,8 @@ function runJwtWeakness(context) {
       confidence: 'low',
       target: context.finalUrl,
       location: 'response body',
-      evidence: ['JWT token pattern được tìm thấy trong response. Cần verify server validate signature và algorithm.'],
-      remediation: 'Đảm bảo server reject token có alg:none, RS256 → HS256 downgrade, và token với signature không hợp lệ.',
+      evidence: ['Phát hiện mẫu JWT token trong response. Cần xác minh server kiểm tra signature và algorithm đúng cách.'],
+      remediation: 'Đảm bảo server từ chối token có alg:none, hạ cấp RS256 → HS256, và mọi token có chữ ký không hợp lệ.',
       references: ['https://portswigger.net/web-security/jwt'],
       collector: 'blackbox'
     }));
@@ -48,17 +48,17 @@ function runSensitiveEndpointExposure(context) {
   const findings = [];
   const surfaceStatus = context.surfaceStatus || {};
   const sensitiveEndpoints = {
-    '/admin': { severity: 'high', title: 'Admin panel' },
-    '/swagger': { severity: 'medium', title: 'Swagger/OpenAPI docs' },
+    '/admin': { severity: 'high', title: 'Bảng quản trị' },
+    '/swagger': { severity: 'medium', title: 'Tài liệu Swagger/OpenAPI' },
     '/swagger-ui': { severity: 'medium', title: 'Swagger UI' },
-    '/api-docs': { severity: 'medium', title: 'API documentation' },
-    '/debug': { severity: 'high', title: 'Debug endpoint' },
+    '/api-docs': { severity: 'medium', title: 'Tài liệu API' },
+    '/debug': { severity: 'high', title: 'Endpoint debug' },
     '/actuator': { severity: 'high', title: 'Spring Actuator' },
-    '/metrics': { severity: 'medium', title: 'Metrics endpoint' },
+    '/metrics': { severity: 'medium', title: 'Endpoint metrics' },
     '/health': { severity: 'low', title: 'Health check (thông tin hệ thống)' },
-    '/phpinfo.php': { severity: 'high', title: 'PHPInfo page' },
-    '/.env': { severity: 'critical', title: 'Environment file' },
-    '/config': { severity: 'high', title: 'Config endpoint' },
+    '/phpinfo.php': { severity: 'high', title: 'Trang PHPInfo' },
+    '/.env': { severity: 'critical', title: 'Tệp biến môi trường' },
+    '/config': { severity: 'high', title: 'Endpoint cấu hình' },
   };
   for (const [path, meta] of Object.entries(sensitiveEndpoints)) {
     const info = surfaceStatus[path];
@@ -67,7 +67,7 @@ function runSensitiveEndpointExposure(context) {
       findings.push(normalizeFinding({
         ruleId: 'A01-EXPOSED-001',
         owaspCategory: 'A01',
-        title: `${meta.title} accessible không cần auth`,
+        title: `${meta.title} có thể truy cập mà không cần xác thực`,
         severity: context.isLocalhost ? 'low' : meta.severity,
         confidence: 'high',
         target: `${context.origin}${path}`,

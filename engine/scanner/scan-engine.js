@@ -37,11 +37,11 @@ const PROBE_ROUTES = [
 ];
 
 const STATIC_EXT_RE = /\.(css|js|png|jpg|jpeg|gif|svg|ico|woff2?|ttf|eot|mp4|webp|pdf|zip|gz|bmp|map)(\?.*)?$/i;
-const MAX_CRAWL_URLS = 40; // increased from 30
+const MAX_CRAWL_URLS = 40;
 
 // ── Tech Stack Fingerprint ────────────────────────────────────────────────────
 const TECH_SIGNATURES = [
-  { name: 'WordPress',  re: /wp-content|wp-includes|wordpress/i,      headerKey: null },
+  { name: 'WordPress',  re: /wp-content|wp-includes|wordpress/i,      header: null },
   { name: 'Laravel',    re: /laravel_session|X-Powered-By: PHP/i,      header: 'x-powered-by', headerRe: /php/i },
   { name: 'Django',     re: /csrfmiddlewaretoken|django/i,             header: null },
   { name: 'Rails',      re: /X-Runtime|_rails_session/i,               header: 'x-runtime', headerRe: /.+/ },
@@ -49,7 +49,11 @@ const TECH_SIGNATURES = [
   { name: 'Nuxt.js',    re: /_nuxt\/|__nuxt/i,                         header: null },
   { name: 'Angular',    re: /ng-version|angular/i,                      header: null },
   { name: 'React',      re: /react\.|__reactFiber|ReactDOM/i,           header: null },
-  { name: 'Vue.js',     re: /vue\.js|__vue__|v-app|nuxt/i,             header: null },
+  // BUG FIX: Phiên bản cũ: /vue\.js|__vue__|v-app|nuxt/i
+  // `nuxt` đã có trong Nuxt.js signature → Vue.js regex chứa `nuxt` khiến app Nuxt.js
+  // bị detect là CẢ HAI "Vue.js" lẫn "Nuxt.js" (double detection).
+  // FIX: Bỏ `nuxt` khỏi Vue.js regex.
+  { name: 'Vue.js',     re: /vue\.js|__vue__|v-app/i,                   header: null },
   { name: 'Spring Boot',re: /Whitelabel Error Page|spring/i,           header: 'x-application-context', headerRe: /.+/ },
   { name: 'Express.js', re: null,                                       header: 'x-powered-by', headerRe: /express/i },
   { name: 'ASP.NET',    re: /__VIEWSTATE|__doPostBack|WebFormsBundle/i, header: 'x-powered-by', headerRe: /asp\.net/i },
@@ -120,16 +124,24 @@ function analyzeCsp(headers) {
 }
 
 // ── Route probing ─────────────────────────────────────────────────────────────
-async function probeRoutesEnhanced(origin, requestHeaders, client) {
+// BUG FIX: Phiên bản cũ không truyền `abortSignal` vào client.request() bên trong.
+// → Nhấn "Stop Scan" không cancel được giai đoạn probe route.
+// FIX: Thêm tham số abortSignal và truyền vào signal của mỗi request.
+async function probeRoutesEnhanced(origin, requestHeaders, client, abortSignal) {
   const surfaceStatus = {};
-  const BATCH = 12; // increased from 10
+  const BATCH = 12;
 
   for (let i = 0; i < PROBE_ROUTES.length; i += BATCH) {
+    if (abortSignal?.aborted) break;
     const batch = PROBE_ROUTES.slice(i, i + BATCH);
     await Promise.all(batch.map(async (route) => {
+      if (abortSignal?.aborted) return;
       try {
         const res = await client.request(`${origin}${route}`, {
-          method: 'GET', headers: requestHeaders, redirect: 'manual',
+          method: 'GET',
+          headers: requestHeaders,
+          redirect: 'manual',
+          signal: abortSignal,   // FIX: truyền signal để có thể abort
         });
         const location = res.response.headers.get('location') || '';
         surfaceStatus[route] = {
@@ -196,7 +208,7 @@ function runGraphQlExposure(context) {
       remediation: 'Disable GraphQL introspection trên production. Implement authentication và query depth limiting.',
       references: ['https://cheatsheetseries.owasp.org/cheatsheets/GraphQL_Cheat_Sheet.html'],
       collector: 'blackbox',
-    })]
+    })];
   }
   return [];
 }
@@ -301,7 +313,7 @@ async function runUrlScan(inputUrl, options = {}) {
       }
     }
 
-    const FETCH_BATCH = 6; // increased from 5
+    const FETCH_BATCH = 6;
     for (let i = 0; i < levelBatch.length; i += FETCH_BATCH) {
       if (abortSignal?.aborted) break;
       await Promise.all(levelBatch.slice(i, i + FETCH_BATCH).map(async (urlToCrawl) => {
@@ -345,9 +357,12 @@ async function runUrlScan(inputUrl, options = {}) {
   onProgress({ stage: 'probe', msg: `Probing ${PROBE_ROUTES.length} routes + fingerprinting…`, level: 'info', ts: Date.now() });
 
   const [optionsProbe, missingPathProbeRaw, surfaceStatus] = await Promise.all([
+    // BUG FIX: truyền `client` vào probeOptions và probeMissingPath
+    // Phiên bản cũ bỏ qua `client`, dùng global fetch/defaultClient với timeout sai
     probeOptions(parsed.toString(), auth, client),
     probeMissingPath(parsed.origin, auth, client),
-    probeRoutesEnhanced(parsed.origin, requestHeaders, client),
+    // BUG FIX: truyền `abortSignal` để Stop Scan cancel được probe route
+    probeRoutesEnhanced(parsed.origin, requestHeaders, client, abortSignal),
   ]);
 
   const accessibleCount = Object.values(surfaceStatus).filter(v => v.status === 200).length;
@@ -412,6 +427,14 @@ async function runUrlScan(inputUrl, options = {}) {
 
   // ── STAGE 3: DYNAMIC FUZZING ──────────────────────────────────
   if (!abortSignal?.aborted) {
+    // FIX (vấn đề A): Xóa cache crawl trước khi fuzz.
+    // ScannerHttpClient cache GET requests theo URL. Nếu không clear, fuzzer gửi payload
+    // tới một URL đã crawl → client trả về cached response thay vì gửi request thật.
+    // Kết quả: payload không thực sự chạm server → bỏ sót vulnerability.
+    // Lưu ý: fuzzer thay đổi query string nên URL string thường khác, nhưng clear cache
+    // ở đây là defensive measure đảm bảo không có edge case nào bị miss.
+    client.clearCache();
+
     onProgress({ stage: 'fuzz', msg: `Dynamic fuzzing (budget: ${maxBudget} requests)…`, level: 'info', ts: Date.now() });
     const dynamicFindings = await runDynamicFuzzing(context, client, maxBudget, onProgress, abortSignal).catch(() => []);
     findings.push(...dynamicFindings);
@@ -457,22 +480,51 @@ async function runUrlScan(inputUrl, options = {}) {
 }
 
 // ── PROJECT SCAN ─────────────────────────────────────────────────────────────
+// BUG FIX: Phiên bản cũ nhận `options.abortSignal` nhưng KHÔNG BAO GIỜ dùng nó.
+// → Nhấn "Stop Scan" khi đang chạy project scan không có tác dụng.
+// FIX: Kiểm tra abortSignal trước và sau các bước nặng (walkFiles, collectX).
 async function runProjectScan(folderPath, options = {}) {
-  const onProgress = options.onProgress || (() => {});
-  const startTs    = Date.now();
+  const onProgress  = options.onProgress  || (() => {});
+  const abortSignal = options.abortSignal  || null;
+  const startTs     = Date.now();
 
   if (!folderPath || typeof folderPath !== 'string') throw new Error('Hãy chọn thư mục project.');
 
   onProgress({ stage: 'analyze', msg: `Scanning project: ${folderPath}`, level: 'info', ts: Date.now() });
 
+  if (abortSignal?.aborted) {
+    return { ok: false, error: 'Scan đã bị hủy.', findings: [], metadata: { summary: { total: 0, byCategory: {}, bySeverity: {} } } };
+  }
+
   const files = walkFiles(folderPath, 600);
   onProgress({ stage: 'analyze', msg: `Tìm thấy ${files.length} files để phân tích`, level: 'info', ts: Date.now() });
 
+  if (abortSignal?.aborted) {
+    return { ok: false, error: 'Scan đã bị hủy.', findings: [], metadata: { summary: { total: 0, byCategory: {}, bySeverity: {} } } };
+  }
+
+  // FIX (vấn đề D): Abort check granular giữa mỗi collectX.
+  // Phiên bản cũ gộp tất cả collect vào 1 block, nếu project lớn thì Stop Scan
+  // chỉ có tác dụng sau khi tất cả 5 hàm chạy xong — UX kém.
+  // FIX: kiểm tra signal trước mỗi collect nặng để cancel ngay khi người dùng nhấn Stop.
+  const ABORTED = { ok: false, error: 'Scan đã bị hủy.', findings: [], metadata: { summary: { total: 0, byCategory: {}, bySeverity: {} } } };
+
+  if (abortSignal?.aborted) return ABORTED;
   const dependencyArtifacts = collectDependencyArtifacts(files);
-  const configFiles         = collectConfigFiles(files);
-  const textFiles           = collectTextFiles(files);
-  const codeFiles           = collectCodeFiles(files);
-  const ciFiles             = collectCiFiles(files);
+
+  if (abortSignal?.aborted) return ABORTED;
+  const configFiles = collectConfigFiles(files);
+
+  if (abortSignal?.aborted) return ABORTED;
+  const textFiles = collectTextFiles(files);
+
+  if (abortSignal?.aborted) return ABORTED;
+  const codeFiles = collectCodeFiles(files);
+
+  if (abortSignal?.aborted) return ABORTED;
+  const ciFiles = collectCiFiles(files);
+
+  if (abortSignal?.aborted) return ABORTED;
 
   onProgress({ stage: 'analyze', msg: 'Chạy rule engine cho project…', level: 'info', ts: Date.now() });
 

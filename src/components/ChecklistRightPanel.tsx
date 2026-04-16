@@ -66,7 +66,7 @@ function ScanSummaryBlock({ scanResult }: { scanResult: ScanResult }) {
           const cls: Record<string, string> = { critical: 'chip-crit', high: 'chip-high', medium: 'chip-med', low: 'chip-low' };
           return <span key={sev} className={`sev-chip ${cls[sev]}`}>{sev.slice(0,4).toUpperCase()} {n}</span>;
         })}
-        {findings.length === 0 && <span style={{ fontSize: 12, color: 'var(--text-3)' }}>No findings</span>}
+        {findings.length === 0 && <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Không có findings</span>}
       </div>
       {Object.keys(byCat).length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -122,17 +122,17 @@ export const ChecklistRightPanel: React.FC = () => {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
       {/* ── Layout 2 cột bên trong right panel ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, alignItems: 'start' }}>
 
         {/* Cột trái: Design Review */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div className="section" style={{ flex: 1 }}>
             <div className="chk-section-header">
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <div className="section-label" style={{ marginBottom: 0 }}>Design Review</div>
+                <div className="section-label" style={{ marginBottom: 0 }}>Đánh giá thiết kế</div>
                 {/* Progress bar */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div style={{ flex: 1, height: 4, background: 'var(--border)', borderRadius: 4, overflow: 'hidden' }}>
@@ -150,9 +150,9 @@ export const ChecklistRightPanel: React.FC = () => {
               <button
                 className="btn-checklist-toggle"
                 onClick={() => setHideCompleted(v => !v)}
-                title={hideCompleted ? 'Show completed items' : 'Hide completed items'}
+                title={hideCompleted ? 'Hiện mục đã hoàn thành' : 'Ẩn mục đã hoàn thành'}
               >
-                {hideCompleted ? '👁️ Show' : '🙈 Hide'} Completed
+                {hideCompleted ? '👁️ Hiện' : '🙈 Ẩn'} mục đã xong
               </button>
             </div>
 
@@ -198,25 +198,25 @@ export const ChecklistRightPanel: React.FC = () => {
               {projectScanResult.metadata?.scannedFiles !== undefined && (
                 <div className="meta-table" style={{ marginTop: 10 }}>
                   <div className="meta-row">
-                    <span className="meta-key">Files scanned</span>
+                    <span className="meta-key">Số file đã quét</span>
                     <span className="meta-val">{projectScanResult.metadata.scannedFiles}</span>
                   </div>
                   {projectScanResult.metadata.packageJsonFound !== undefined && (
                     <div className="meta-row">
                       <span className="meta-key">package.json</span>
                       <span className={`meta-val ${projectScanResult.metadata.packageJsonFound ? 'ok' : ''}`}>
-                        {projectScanResult.metadata.packageJsonFound ? 'Yes' : 'No'}
+                        {projectScanResult.metadata.packageJsonFound ? 'Có' : 'Không'}
                       </span>
                     </div>
                   )}
                   {projectScanResult.metadata.configCount !== undefined && (
                     <div className="meta-row">
-                      <span className="meta-key">Config files</span>
+                      <span className="meta-key">File cấu hình</span>
                       <span className="meta-val">{projectScanResult.metadata.configCount}</span>
                     </div>
                   )}
                   <div className="meta-row">
-                    <span className="meta-key">Total findings</span>
+                    <span className="meta-key">Tổng số findings</span>
                     <span className="meta-val">{projectScanResult.findings.length}</span>
                   </div>
                 </div>

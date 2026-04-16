@@ -1,5 +1,6 @@
 {
   "root": true,
+  "ignorePatterns": ["dist", "dist-ts", "dist-electron", "node_modules"],
   "parser": "@typescript-eslint/parser",
   "plugins": ["@typescript-eslint", "react", "react-hooks"],
   "extends": [
@@ -9,14 +10,30 @@
     "plugin:react-hooks/recommended"
   ],
   "settings": { "react": { "version": "detect" } },
+  "env": { "browser": true, "es2022": true },
   "rules": {
     "react/react-in-jsx-scope": "off",
+    "react/prop-types": "off",
     "@typescript-eslint/no-explicit-any": "warn",
-    "no-console": ["warn", { "allow": ["error", "warn"] }]
+    "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],
+    "no-console": ["warn", { "allow": ["error", "warn"] }],
+    "no-redeclare": "warn"
   },
   "overrides": [
     {
-      "files": ["electron/**/*.js", "engine/**/*.js"],
+      "files": ["**/*.test.js", "**/*.spec.js"],
+      "env": { "node": true, "es2022": true },
+      "parser": "espree",
+      "parserOptions": { "ecmaVersion": 2022, "sourceType": "module" },
+      "extends": ["eslint:recommended"],
+      "rules": {
+        "no-unused-vars": "off",
+        "no-redeclare": "off"
+      }
+    },
+    {
+      "files": ["engine/**/*.js", "electron/**/*.js"],
+      "excludedFiles": ["**/*.test.js", "**/*.spec.js"],
       "env": { "node": true, "commonjs": true, "es2022": true },
       "parser": "espree",
       "parserOptions": { "ecmaVersion": 2022, "sourceType": "script" },
@@ -25,7 +42,9 @@
       "rules": {
         "no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],
         "no-empty": ["error", { "allowEmptyCatch": true }],
-        "@typescript-eslint/no-var-requires": "off"
+        "no-redeclare": "off",
+        "@typescript-eslint/no-var-requires": "off",
+        "@typescript-eslint/no-unused-vars": "off"
       }
     }
   ]

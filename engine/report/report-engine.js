@@ -22,9 +22,9 @@ function buildHtmlReport(scanResult = {}) {
   const authSummary = scanResult.metadata?.auth || null;
   const findingCards = findings.map((finding) => `
     <article class="finding sev-${escapeHtml(finding.severity)}">
-      <div class="topline">${escapeHtml(finding.ruleId)} • ${escapeHtml(finding.owaspCategory)} • ${escapeHtml(finding.severity.toUpperCase())} • Confidence: ${escapeHtml(finding.confidence)}</div>
+      <div class="topline">${escapeHtml(finding.ruleId)} • ${escapeHtml(finding.owaspCategory)} • ${escapeHtml(finding.severity.toUpperCase())} • Độ tin cậy: ${escapeHtml(finding.confidence)}</div>
       <h3>${escapeHtml(finding.title)}</h3>
-      <div class="meta">Target: ${escapeHtml(finding.target)}${finding.location ? ` • ${escapeHtml(finding.location)}` : ''} • Collector: ${escapeHtml(finding.collector)}</div>
+      <div class="meta">Mục tiêu: ${escapeHtml(finding.target)}${finding.location ? ` • ${escapeHtml(finding.location)}` : ''} • Collector: ${escapeHtml(finding.collector)}</div>
       <ul>${(finding.evidence || []).map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>
       <p><strong>Khắc phục:</strong> ${escapeHtml(finding.remediation || '')}</p>
     </article>
@@ -35,7 +35,7 @@ function buildHtmlReport(scanResult = {}) {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SENTINEL — OWASP 2025 Report</title>
+  <title>SENTINEL — Báo cáo OWASP 2025</title>
   <style>
     body { font-family: Inter, Segoe UI, Arial, sans-serif; margin: 0; background: #0b1020; color: #eef3ff; }
     .wrap { max-width: 1120px; margin: 0 auto; padding: 32px; }
@@ -54,17 +54,17 @@ function buildHtmlReport(scanResult = {}) {
 <body>
   <div class="wrap">
     <section class="hero">
-      <h1>SENTINEL — OWASP 2025 Report</h1>
-      <p class="muted">Mode: ${escapeHtml(scanResult.mode || 'unknown')} • Generated: ${escapeHtml(new Date().toISOString())}</p>
-      <p><strong>Target:</strong> ${escapeHtml(scanResult.scannedUrl || scanResult.target || '')}</p>
-      ${scanResult.finalUrl ? `<p><strong>Final URL:</strong> ${escapeHtml(scanResult.finalUrl)}</p>` : ''}
-      ${typeof scanResult.status !== 'undefined' ? `<p><strong>Status:</strong> ${escapeHtml(String(scanResult.status))}</p>` : ''}
-      ${scanResult.title ? `<p><strong>Title:</strong> ${escapeHtml(scanResult.title)}</p>` : ''}
-      ${authSummary ? `<p><strong>Auth used:</strong> cookie=${authSummary.hasCookie ? 'yes' : 'no'}, bearer=${authSummary.hasBearerToken ? 'yes' : 'no'}</p>` : ''}
+      <h1>SENTINEL — Báo cáo OWASP 2025</h1>
+      <p class="muted">Chế độ: ${escapeHtml(scanResult.mode || 'không rõ')} • Thời điểm tạo: ${escapeHtml(new Date().toISOString())}</p>
+      <p><strong>Mục tiêu:</strong> ${escapeHtml(scanResult.scannedUrl || scanResult.target || '')}</p>
+      ${scanResult.finalUrl ? `<p><strong>URL cuối cùng:</strong> ${escapeHtml(scanResult.finalUrl)}</p>` : ''}
+      ${typeof scanResult.status !== 'undefined' ? `<p><strong>Trạng thái:</strong> ${escapeHtml(String(scanResult.status))}</p>` : ''}
+      ${scanResult.title ? `<p><strong>Tiêu đề:</strong> ${escapeHtml(scanResult.title)}</p>` : ''}
+      ${authSummary ? `<p><strong>Xác thực đã dùng:</strong> cookie=${authSummary.hasCookie ? 'có' : 'không'}, bearer=${authSummary.hasBearerToken ? 'có' : 'không'}</p>` : ''}
     </section>
     <section class="grid">
-      <div class="panel"><h2>Summary by Category</h2><pre>${escapeHtml(JSON.stringify(summary.byCategory, null, 2))}</pre></div>
-      <div class="panel"><h2>Summary by Severity</h2><pre>${escapeHtml(JSON.stringify(summary.bySeverity, null, 2))}</pre></div>
+      <div class="panel"><h2>Tổng hợp theo danh mục</h2><pre>${escapeHtml(JSON.stringify(summary.byCategory, null, 2))}</pre></div>
+      <div class="panel"><h2>Tổng hợp theo mức độ</h2><pre>${escapeHtml(JSON.stringify(summary.bySeverity, null, 2))}</pre></div>
     </section>
     <section class="panel"><h2>Metadata</h2><pre>${escapeHtml(JSON.stringify(scanResult.metadata || {}, null, 2))}</pre></section>
     <section>

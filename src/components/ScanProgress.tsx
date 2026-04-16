@@ -29,21 +29,21 @@ export const ScanProgress: React.FC = () => {
     <div className="progress-panel">
       <div className="progress-panel-hdr">
         <div className="spinner-sm" />
-        <span className="progress-panel-title">Scanning in progress…</span>
+        <span className="progress-panel-title">Đang quét…</span>
         <div style={{ flex: 1 }} />
-        <span className="log-count-badge">{logCount} events</span>
+        <span className="log-count-badge">{logCount} sự kiện</span>
         {isLoading && (
           <button
             className="btn-stop"
             onClick={stopScan}
-            title="Stop scan"
+            title="Dừng quét"
           >
-            ■ Stop
+            ■ Dừng
           </button>
         )}
       </div>
 
-      {/* Stage pipeline */}
+      {/* Pipeline các giai đoạn quét */}
       <div className="stage-pipeline">
         {STAGES.map((s) => {
           const stage = s as ScanProgressEvent['stage'];
@@ -59,16 +59,16 @@ export const ScanProgress: React.FC = () => {
         })}
       </div>
 
-      {/* Terminal log */}
+      {/* Nhật ký tiến trình */}
       <div className="progress-log">
         {progressLog.length === 0 && (
-          <div className="log-line log-info"><span className="log-msg">Initialising…</span></div>
+          <div className="log-line log-info"><span className="log-msg">Đang khởi tạo…</span></div>
         )}
         {progressLog.map((ev, i) => (
           <div key={i} className={`log-line log-${ev.level}`}>
             <span className="log-icon">{ICONS[ev.stage] || '·'}</span>
             <span className="log-ts">
-              {new Date(ev.ts).toLocaleTimeString('en', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              {new Date(ev.ts).toLocaleTimeString('vi-VN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
             </span>
             <span className="log-msg">{ev.msg}</span>
           </div>

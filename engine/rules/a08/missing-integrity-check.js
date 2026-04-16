@@ -10,11 +10,11 @@ function runMissingIntegrityCheck(context) {
           findings.push(normalizeFinding({
             ruleId: 'A08-INTEGRITY-001',
             owaspCategory: 'A08',
-            title: 'Script ngoài không có integrity attribute',
+            title: 'Script ngoài không có thuộc tính integrity',
             severity: 'medium',
             confidence: 'medium',
             target: file.path,
-            location: 'external script tag',
+            location: 'thẻ script ngoài',
             evidence: [script[0].slice(0, 180)],
             remediation: 'Thêm Subresource Integrity hoặc tự host asset tin cậy.',
             references: ['https://owasp.org/Top10/2025/A08_2025-Software_or_Data_Integrity_Failures/'],

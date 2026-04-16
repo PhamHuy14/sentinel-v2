@@ -21,7 +21,7 @@ function runBruteForceProtection(context) {
       target: context.finalUrl,
       location: 'response headers + body',
       evidence: ['Không tìm thấy X-RateLimit-*, Retry-After headers', 'Không có thông báo rate limiting rõ ràng trong response'],
-      remediation: 'Implement rate limiting cho login endpoint (tối đa 5-10 lần/phút/IP). Dùng exponential backoff, CAPTCHA sau nhiều lần thất bại.',
+        remediation: 'Triển khai rate limiting cho endpoint đăng nhập (tối đa 5-10 lần/phút/IP). Dùng exponential backoff và CAPTCHA sau nhiều lần thất bại.',
       references: ['https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html#account-lockout'],
       collector: 'blackbox'
     }));
@@ -40,13 +40,13 @@ function runPasswordPolicyHeuristic(context) {
     return [normalizeFinding({
       ruleId: 'A07-PASS-001',
       owaspCategory: 'A07',
-      title: 'Không thấy dấu hiệu password complexity requirement rõ ràng',
+      title: 'Không thấy yêu cầu độ mạnh mật khẩu rõ ràng',
       severity: 'low',
       confidence: 'low',
       target: context.finalUrl,
       location: 'password form',
-      evidence: ['Form có password field nhưng không thấy minlength hoặc password policy hint'],
-      remediation: 'Enforce minimum 12 ký tự. Cho phép tất cả ký tự Unicode. Kiểm tra password bị leak (HaveIBeenPwned API).',
+      evidence: ['Form có trường mật khẩu nhưng không thấy minlength hoặc gợi ý password policy'],
+      remediation: 'Áp dụng tối thiểu 12 ký tự. Cho phép ký tự Unicode. Kiểm tra mật khẩu rò rỉ bằng dịch vụ như HaveIBeenPwned.',
       references: ['https://pages.nist.gov/800-63-3/sp800-63b.html'],
       collector: 'blackbox'
     })];
@@ -60,13 +60,13 @@ function runDefaultCredentialsHint(context) {
     return [normalizeFinding({
       ruleId: 'A07-DEFCRED-001',
       owaspCategory: 'A07',
-      title: 'Trang chứa hint về default credentials',
+      title: 'Trang chứa gợi ý về tài khoản mặc định',
       severity: 'high',
       confidence: 'medium',
       target: context.finalUrl,
       location: 'response body',
-      evidence: ['Phát hiện text về default username/password trong response'],
-      remediation: 'Xóa mọi reference đến default credentials. Force change password ngay lần đầu login.',
+      evidence: ['Phát hiện nội dung nhắc đến username/password mặc định trong response'],
+      remediation: 'Xóa mọi tham chiếu đến tài khoản mặc định. Bắt buộc đổi mật khẩu ngay lần đăng nhập đầu tiên.',
       references: ['https://owasp.org/Top10/2025/A07_2025-Authentication_Failures/'],
       collector: 'blackbox'
     })];
@@ -111,8 +111,8 @@ function runMfaPresence(context) {
       confidence: 'low',
       target: context.finalUrl,
       location: 'login flow',
-      evidence: ['Không phát hiện OTP, MFA, hoặc 2-factor mention trong trang đăng nhập'],
-      remediation: 'Implement TOTP (Google Authenticator), WebAuthn, hoặc email/SMS OTP.',
+      evidence: ['Không phát hiện OTP, MFA hoặc nhắc đến xác thực hai lớp trong trang đăng nhập'],
+      remediation: 'Triển khai TOTP (Google Authenticator), WebAuthn hoặc OTP qua email/SMS.',
       references: ['https://cheatsheetseries.owasp.org/cheatsheets/Multifactor_Authentication_Cheat_Sheet.html'],
       collector: 'blackbox'
     })];

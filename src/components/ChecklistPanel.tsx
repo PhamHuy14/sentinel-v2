@@ -68,7 +68,14 @@ export function buildChecklistFromFindings(findings: Finding[]) {
     byCategory[key].push(f);
   }
   return OWASP_CATS.map(cat => {
-    const hits = Object.entries(byCategory).filter(([k]) => k.includes(cat.id));
+    const hits = Object.entries(byCategory).filter(([k]) => {
+      if (k.includes(cat.id)) return true;
+      if (k.includes(cat.name.toUpperCase())) return true;
+      // Map legacy formats like A1 instead of A01
+      const legacyId = cat.id.replace('A0', 'A');
+      if (legacyId !== cat.id && k.includes(legacyId)) return true;
+      return false;
+    });
     const allFindings: Finding[] = hits.flatMap(([, fs]) => fs);
     const maxSev = allFindings.reduce((acc, f) =>
       SEV_ORDER[f.severity] > SEV_ORDER[acc] ? f.severity : acc, 'low' as string);
@@ -132,7 +139,7 @@ export const ChecklistItem: React.FC<ChecklistItemProps> = ({ id, label, hideCom
           <button
             className={`chk-expand-btn ${expanded ? 'open' : ''}`}
             onClick={() => setExpanded(v => !v)}
-            title={expanded ? 'Thu gọn' : 'Xem todo & recommendations'}
+            title={expanded ? 'Thu gọn' : 'Xem todo & khuyến nghị'}
           >
             {expanded ? '▲' : '▼'}
           </button>
@@ -142,7 +149,7 @@ export const ChecklistItem: React.FC<ChecklistItemProps> = ({ id, label, hideCom
         <div className="chk-item-detail">
           {todos && todos.length > 0 && (
             <div className="chk-detail-section">
-              <div className="chk-detail-label">✅ Todo list</div>
+              <div className="chk-detail-label">✅ Việc cần làm</div>
               <ul className="chk-todo-list">
                 {todos.map((t, i) => <li key={i} className="chk-todo-item">{t}</li>)}
               </ul>
@@ -150,7 +157,7 @@ export const ChecklistItem: React.FC<ChecklistItemProps> = ({ id, label, hideCom
           )}
           {recommend && (
             <div className="chk-detail-section">
-              <div className="chk-detail-label">💡 Recommendation</div>
+              <div className="chk-detail-label">💡 Khuyến nghị</div>
               <div className="chk-recommend-text">{recommend}</div>
             </div>
           )}
@@ -177,7 +184,7 @@ const ChecklistSourceBanner: React.FC<{
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, fontSize: 12 }}>
         {isCombined ? (
-          <><span style={{ color: 'var(--accent)' }}>🔗 Combined</span><span style={{ color: 'var(--text-3)', fontWeight: 400 }}>URL + Project</span></>
+          <><span style={{ color: 'var(--accent)' }}>🔗 Kết hợp</span><span style={{ color: 'var(--text-3)', fontWeight: 400 }}>URL + Project</span></>
         ) : hasUrlLocal ? (
           <><span style={{ color: 'var(--accent)' }}>🌐 URL Scan</span><span style={{ color: 'var(--text-3)', fontWeight: 400, fontSize: 11 }}>{urlTarget}</span></>
         ) : (
@@ -211,7 +218,9 @@ export const ChecklistPanel: React.FC = () => {
   } = useStore();
   const [hideCompleted, setHideCompleted] = useState(false);
 
-  useEffect(() => { loadChecklist(); }, []); // eslint-disable-line
+  useEffect(() => {
+    loadChecklist();
+  }, [loadChecklist]);
 
   const hasProjectScan = !!projectScanResult;
   const hasUrlLocal    = urlScanIsLocal && !!urlScanResult;

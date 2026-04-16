@@ -1,5 +1,5 @@
 // engine/scanner/fuzzer.js
-// ── Sentinel v2 — Active Fuzzer (upgraded: SSRF, Path Traversal, SSTI, Cmd Injection, timing SQLi, budget guard)
+// ── Sentinel v2 — Active Fuzzer (nâng cấp: SSRF, Path Traversal, SSTI, Cmd Injection, timing SQLi, budget guard)
 
 const { URL } = require('url');
 const { detectParamType }   = require('./param-intelligence');
@@ -17,20 +17,20 @@ const {
 const { verifySqli, verifyXss } = require('./verifier');
 const { normalizeFinding }      = require('../models/finding');
 
-// ── Constants ────────────────────────────────────────────────────────────────
-const PCONCUR   = 4;  // URL params concurrent  (was 3)
-const SLEEP_SECS = 3; // seconds for timing payloads
+// ── Hằng số ──────────────────────────────────────────────────────────────────
+const PCONCUR   = 4;  // Số param URL test song song (trước đây là 3)
+const SLEEP_SECS = 3; // Số giây dùng cho payload timing
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Hàm hỗ trợ ───────────────────────────────────────────────────────────────
 
-/** Atomic-style budget guard: pre-decrement before await to prevent overshoot */
+/** Bộ chặn budget kiểu atomic: trừ trước khi await để tránh vượt ngưỡng */
 function takeBudget(state) {
   if (state.budget <= 0) return false;
   state.budget--;
   return true;
 }
 
-/** Measure baseline response time for timing attacks */
+/** Đo thời gian phản hồi gốc để so sánh cho timing attack */
 async function measureBaseline(url, headers, client) {
   try {
     const r = await client.request(url, { headers });
@@ -40,14 +40,14 @@ async function measureBaseline(url, headers, client) {
   }
 }
 
-// ── Main export ───────────────────────────────────────────────────────────────
+// ── Hàm export chính ──────────────────────────────────────────────────────────
 async function runDynamicFuzzing(context, client, maxBudget = 20, onProgress, abortSignal) {
   const emit   = onProgress || (() => {});
-  const state  = { budget: maxBudget }; // mutable object — shared safely (JS single-threaded)
+  const state  = { budget: maxBudget }; // object mutable, dùng chung an toàn vì JS chạy đơn luồng
   const findings = [];
   const processedKeys = new Set();
 
-  // ── PART 1: URL PARAM FUZZING ─────────────────────────────────────────────
+  // ── PHẦN 1: FUZZ PARAM URL ────────────────────────────────────────────────
   const urlParamPairs = [];
   for (const link of context.links) {
     if (abortSignal?.aborted) break;
@@ -61,7 +61,7 @@ async function runDynamicFuzzing(context, client, maxBudget = 20, onProgress, ab
     } catch {}
   }
 
-  emit({ stage: 'fuzz', msg: `URL params: ${urlParamPairs.length} injectable param(s) found`, level: 'info', ts: Date.now() });
+  emit({ stage: 'fuzz', msg: `Param URL: tìm thấy ${urlParamPairs.length} tham số có thể inject`, level: 'info', ts: Date.now() });
 
   for (let i = 0; i < urlParamPairs.length; i += PCONCUR) {
     if (state.budget <= 0 || abortSignal?.aborted) break;
@@ -71,9 +71,9 @@ async function runDynamicFuzzing(context, client, maxBudget = 20, onProgress, ab
       const paramType = detectParamType(key, val);
       const payloads  = getPayloadsByType(paramType, false);
 
-      emit({ stage: 'fuzz', msg: `Testing [GET] ${basePath} — param "${key}" (${paramType})`, level: 'info', ts: Date.now() });
+      emit({ stage: 'fuzz', msg: `Đang test [GET] ${basePath} — param "${key}" (${paramType})`, level: 'info', ts: Date.now() });
 
-      // Measure baseline for timing attacks
+      // Đo baseline để phát hiện timing attack
       const baselineMs = (paramType === 'number' || paramType === 'unknown')
         ? await measureBaseline(urlObj.toString(), context.requestHeaders, client)
         : 0;
@@ -96,9 +96,9 @@ async function runDynamicFuzzing(context, client, maxBudget = 20, onProgress, ab
     }));
   }
 
-  // ── PART 2: FORM FUZZING ─────────────────────────────────────────────────
+  // ── PHẦN 2: FUZZ FORM ─────────────────────────────────────────────────────
   const forms = context.forms || [];
-  emit({ stage: 'fuzz', msg: `Form fuzzing: ${forms.length} form(s) detected`, level: 'info', ts: Date.now() });
+  emit({ stage: 'fuzz', msg: `Fuzz form: phát hiện ${forms.length} biểu mẫu`, level: 'info', ts: Date.now() });
 
   for (const form of forms) {
     if (state.budget <= 0 || abortSignal?.aborted) break;
@@ -120,7 +120,7 @@ async function runDynamicFuzzing(context, client, maxBudget = 20, onProgress, ab
       const paramType = detectParamType(key, input.value || '');
       const payloads  = getPayloadsByType(paramType, false);
 
-      emit({ stage: 'fuzz', msg: `Testing [${method.toUpperCase()} form] "${key}" (${paramType})`, level: 'info', ts: Date.now() });
+      emit({ stage: 'fuzz', msg: `Đang test [form ${method.toUpperCase()}] "${key}" (${paramType})`, level: 'info', ts: Date.now() });
 
       const baselineMs = (paramType === 'number' || paramType === 'unknown')
         ? await measureBaseline(formAction, context.requestHeaders, client)
@@ -157,7 +157,7 @@ async function runDynamicFuzzing(context, client, maxBudget = 20, onProgress, ab
     }
   }
 
-  // ── PART 3: HEADER INJECTION (small budget slice) ─────────────────────────
+  // ── PHẦN 3: INJECTION QUA HEADER (chỉ dùng phần budget nhỏ) ───────────────
   if (state.budget > 3 && !abortSignal?.aborted) {
     await _testHeaderInjection(context, client, state, findings, emit, abortSignal);
   }
@@ -165,8 +165,8 @@ async function runDynamicFuzzing(context, client, maxBudget = 20, onProgress, ab
   return findings;
 }
 
-// ── Analysis Router ───────────────────────────────────────────────────────────
-async function _analyzeResponse(res, payload, paramType, targetUrl, key, location, client, reqHeaders, findings, emit, baselineMs, state, abortSignal) {
+// ── Bộ định tuyến phân tích phản hồi ──────────────────────────────────────────
+async function _analyzeResponse(res, payload, paramType, targetUrl, key, location, client, reqHeaders, findings, emit, baselineMs, _state, _abortSignal) {
   if (!res) return false;
 
   // XSS
@@ -179,7 +179,7 @@ async function _analyzeResponse(res, payload, paramType, targetUrl, key, locatio
         severity: 'high', confidence,
         target: targetUrl, location,
         evidence: [`Payload: ${payload}`, `Tham số '${key}' phản xạ dữ liệu chưa encode vào HTML response.`],
-        remediation: 'Dùng Context-Aware Output Encoding. Kiểm tra Content-Security-Policy header.',
+        remediation: 'Dùng cơ chế output encoding theo đúng ngữ cảnh. Đồng thời kiểm tra và siết chặt header Content-Security-Policy.',
         references: ['https://owasp.org/Top10/2025/A05_2025-Injection/'],
         collector: 'active-fuzzer',
       }));
@@ -187,7 +187,7 @@ async function _analyzeResponse(res, payload, paramType, targetUrl, key, locatio
     }
   }
 
-  // SQLi — error-based
+  // SQLi — dạng error-based
   if ((paramType === 'number' || paramType === 'unknown' || paramType === 'text') && !payload.includes('SLEEP') && !payload.includes('WAITFOR') && !payload.includes('pg_sleep')) {
     if (isSqlError(res)) {
       const confidence = await verifySqli(targetUrl, key, client, reqHeaders).catch(() => 'medium');
@@ -197,7 +197,7 @@ async function _analyzeResponse(res, payload, paramType, targetUrl, key, locatio
         severity: 'critical', confidence,
         target: targetUrl, location,
         evidence: [`Payload: ${payload}`, `Server trả về SQL error hoặc HTTP 500 khi inject vào '${key}'.`],
-        remediation: 'Dùng Prepared Statements / Parameterized Queries. Never expose raw DB errors.',
+        remediation: 'Dùng Prepared Statements / Parameterized Queries. Không bao giờ để lộ lỗi DB thô ra ngoài.',
         references: ['https://owasp.org/Top10/2025/A05_2025-Injection/'],
         collector: 'active-fuzzer',
       }));
@@ -205,15 +205,15 @@ async function _analyzeResponse(res, payload, paramType, targetUrl, key, locatio
     }
   }
 
-  // SQLi — time-based (SLEEP/WAITFOR payloads only)
+  // SQLi — dạng time-based (chỉ áp dụng cho payload SLEEP/WAITFOR)
   if ((payload.includes('SLEEP') || payload.includes('WAITFOR') || payload.includes('pg_sleep')) && isSqlTiming(res, SLEEP_SECS, baselineMs)) {
     _push(findings, emit, normalizeFinding({
       ruleId: 'A05-SQLI-TIME', owaspCategory: 'A05',
       title: `SQL Injection (Time-based Blind) tại tham số '${key}'`,
       severity: 'critical', confidence: 'medium',
       target: targetUrl, location,
-      evidence: [`Payload: ${payload}`, `Server trả lời sau ${res.timeMs}ms (baseline: ${baselineMs}ms) — có khả năng time-based SQLi.`],
-      remediation: 'Dùng Parameterized Queries. Bật WAF với rate-limiting cho database queries.',
+      evidence: [`Payload: ${payload}`, `Server phản hồi sau ${res.timeMs}ms (baseline: ${baselineMs}ms) — có khả năng time-based SQLi.`],
+        remediation: 'Dùng truy vấn tham số hóa. Có thể bật WAF và giới hạn tần suất request để giảm nguy cơ khai thác.',
       references: ['https://owasp.org/Top10/2025/A05_2025-Injection/'],
       collector: 'active-fuzzer',
     }));
@@ -225,10 +225,10 @@ async function _analyzeResponse(res, payload, paramType, targetUrl, key, locatio
     if (isOpenRedirect(res, payload)) {
       _push(findings, emit, normalizeFinding({
         ruleId: 'A01-REDIRECT-FUZZ', owaspCategory: 'A01',
-        title: `Open Redirect tại tham số '${key}'`,
+        title: `Lỗ hổng Open Redirect tại tham số '${key}'`,
         severity: 'medium', confidence: 'high',
         target: targetUrl, location,
-        evidence: [`Payload: ${payload}`, `Server redirect sang domain ngoài (Open Redirect).`],
+        evidence: [`Payload: ${payload}`, `Server redirect sang domain ngoài, cho thấy có dấu hiệu Open Redirect.`],
         remediation: 'Validate URL đích, dùng whitelist, không trust giá trị người dùng cung cấp.',
         references: [],
         collector: 'active-fuzzer',
@@ -242,7 +242,7 @@ async function _analyzeResponse(res, payload, paramType, targetUrl, key, locatio
     if (isSsrfResponse(res)) {
       _push(findings, emit, normalizeFinding({
         ruleId: 'A10-SSRF-FUZZ', owaspCategory: 'A10',
-        title: `Server-Side Request Forgery (SSRF) tại tham số '${key}'`,
+        title: `Lỗ hổng SSRF tại tham số '${key}'`,
         severity: 'critical', confidence: 'high',
         target: targetUrl, location,
         evidence: [`Payload: ${payload}`, `Response chứa cloud metadata hoặc internal IP — SSRF đã khai thác được.`],
@@ -259,7 +259,7 @@ async function _analyzeResponse(res, payload, paramType, targetUrl, key, locatio
     if (isPathTraversal(res)) {
       _push(findings, emit, normalizeFinding({
         ruleId: 'A01-PATH-TRAVERSAL-FUZZ', owaspCategory: 'A01',
-        title: `Path Traversal tại tham số '${key}'`,
+        title: `Lỗ hổng Path Traversal tại tham số '${key}'`,
         severity: 'high', confidence: 'high',
         target: targetUrl, location,
         evidence: [`Payload: ${payload}`, `Response chứa nội dung file hệ thống (vd: /etc/passwd, win.ini).`],
@@ -293,7 +293,7 @@ async function _analyzeResponse(res, payload, paramType, targetUrl, key, locatio
     if (isCommandInjection(res)) {
       _push(findings, emit, normalizeFinding({
         ruleId: 'A05-CMDI-FUZZ', owaspCategory: 'A05',
-        title: `Command Injection tại tham số '${key}'`,
+        title: `Lỗ hổng Command Injection tại tham số '${key}'`,
         severity: 'critical', confidence: 'high',
         target: targetUrl, location,
         evidence: [`Payload: ${payload}`, `Response chứa output của lệnh hệ thống (id/ls/whoami).`],

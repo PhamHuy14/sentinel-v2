@@ -11,11 +11,11 @@ function calcRiskScore(findings: Finding[]): number {
 }
 
 function riskInfo(s: number) {
-  if (s >= 70) return { label: 'CRITICAL RISK', color: 'var(--crit)' };
-  if (s >= 40) return { label: 'HIGH RISK',     color: 'var(--high)' };
-  if (s >= 15) return { label: 'MEDIUM RISK',   color: 'var(--med)'  };
-  if (s >  0)  return { label: 'LOW RISK',      color: 'var(--low)'  };
-  return              { label: 'CLEAN',          color: 'var(--low)'  };
+  if (s >= 70) return { label: 'RỦI RO NGHIÊM TRỌNG', color: 'var(--crit)' };
+  if (s >= 40) return { label: 'RỦI RO CAO',          color: 'var(--high)' };
+  if (s >= 15) return { label: 'RỦI RO TRUNG BÌNH',   color: 'var(--med)'  };
+  if (s >  0)  return { label: 'RỦI RO THẤP',         color: 'var(--low)'  };
+  return              { label: 'AN TOÀN',             color: 'var(--low)'  };
 }
 
 const Gauge: React.FC<{ score: number; color: string; clipId: string }> = ({ score, color, clipId }) => {
@@ -42,7 +42,7 @@ const Gauge: React.FC<{ score: number; color: string; clipId: string }> = ({ sco
   );
 };
 
-// Risk Trend sparkline (compare with previous scan of same target in history)
+// Xu hướng rủi ro so với lần quét trước của cùng mục tiêu
 const RiskTrend: React.FC<{ current: number; previous?: number | null }> = ({ current, previous }) => {
   if (previous == null) return null;
   const diff  = current - previous;
@@ -51,17 +51,17 @@ const RiskTrend: React.FC<{ current: number; previous?: number | null }> = ({ cu
   return (
     <div className={`rg-trend ${cls}`}>
       <span className="rg-trend-arrow">{arrow}</span>
-      <span className="rg-trend-val">{Math.abs(diff)} vs prev</span>
+      <span className="rg-trend-val">{Math.abs(diff)} so với lần trước</span>
     </div>
   );
 };
 
-// Tech Stack badges
+// Nhãn công nghệ phát hiện được
 const TechStackPanel: React.FC<{ techStack?: string[] }> = ({ techStack }) => {
   if (!techStack?.length) return null;
   return (
     <div className="rg-tech-stack">
-      <div className="rg-bars-hdr">Tech Stack</div>
+      <div className="rg-bars-hdr">Ngăn xếp công nghệ</div>
       <div className="rg-tech-chips">
         {techStack.map(t => <span key={t} className="tech-chip">{t}</span>)}
       </div>
@@ -69,7 +69,7 @@ const TechStackPanel: React.FC<{ techStack?: string[] }> = ({ techStack }) => {
   );
 };
 
-// Attack Surface panel
+// Panel bề mặt tấn công
 const AttackSurfacePanel: React.FC<{ attackSurface?: { score: number; exposedRoutes: { route: string; status: number; weight: number }[] } }> = ({ attackSurface }) => {
   if (!attackSurface) return null;
   const score = attackSurface.score;
@@ -78,7 +78,7 @@ const AttackSurfacePanel: React.FC<{ attackSurface?: { score: number; exposedRou
 
   return (
     <div className="rg-attack-surface">
-      <div className="rg-bars-hdr">Attack Surface</div>
+      <div className="rg-bars-hdr">Bề mặt tấn công</div>
       <div className={`as-score-badge ${cls}`}>{score}<span style={{ fontSize: 10, fontWeight: 400 }}>/100</span></div>
       {top.length > 0 && (
         <div className="as-routes">
@@ -105,9 +105,9 @@ export const RiskDashboard: React.FC<Props> = ({ scanResult }) => {
 
   return (
     <div className="risk-dashboard">
-      {/* Row 1: Gauge + Severity + Categories */}
+      {/* Hàng 1: Gauge + severity + danh mục */}
       <div className="rg-top-row">
-        {/* Gauge */}
+        {/* Đồng hồ rủi ro */}
         <div className="rg-gauge-wrap">
           <Gauge score={score} color={color} clipId={`rg-clip-${gaugeClipId}`} />
           <div className="rg-risk-label" style={{ color }}>{label}</div>
@@ -115,7 +115,7 @@ export const RiskDashboard: React.FC<Props> = ({ scanResult }) => {
           <RiskTrend current={score} previous={null} />
         </div>
 
-        {/* Severity summary */}
+        {/* Tổng hợp mức độ nghiêm trọng */}
         <div className="rg-sev-summary">
           {(['critical', 'high', 'medium', 'low'] as const).map((sev) => {
             const n = bySev[sev] || 0;
@@ -128,10 +128,10 @@ export const RiskDashboard: React.FC<Props> = ({ scanResult }) => {
           })}
         </div>
 
-        {/* Category bars */}
+        {/* Biểu đồ theo danh mục */}
         {Object.keys(byCat).length > 0 && (
           <div className="rg-bars">
-            <div className="rg-bars-hdr">By OWASP Category</div>
+            <div className="rg-bars-hdr">Theo danh mục OWASP</div>
             {Object.entries(byCat).sort((a, b) => b[1] - a[1]).map(([cat, count]) => (
               <div key={cat} className="rg-bar-row">
                 <span className="rg-bar-cat">{cat}</span>
@@ -145,7 +145,7 @@ export const RiskDashboard: React.FC<Props> = ({ scanResult }) => {
         )}
       </div>
 
-      {/* Row 2: Tech Stack + Attack Surface (URL scan only) */}
+      {/* Hàng 2: tech stack + bề mặt tấn công */}
       {(metadata.techStack || metadata.attackSurface) && (
         <div className="rg-bottom-row">
           <TechStackPanel techStack={metadata.techStack} />
@@ -153,13 +153,13 @@ export const RiskDashboard: React.FC<Props> = ({ scanResult }) => {
           {metadata.cspAnalysis && !metadata.cspAnalysis.present && (
             <div className="rg-csp-warn">
               <span className="rg-csp-icon">⚠</span>
-              <span>Content-Security-Policy header absent</span>
+              <span>Thiếu header Content-Security-Policy</span>
             </div>
           )}
           {metadata.cspAnalysis?.issues && metadata.cspAnalysis.issues.length > 0 && metadata.cspAnalysis.present && (
             <div className="rg-csp-warn">
               <span className="rg-csp-icon">⚠</span>
-              <span>CSP issues: {metadata.cspAnalysis.issues[0]}</span>
+              <span>Vấn đề CSP: {metadata.cspAnalysis.issues[0]}</span>
             </div>
           )}
         </div>

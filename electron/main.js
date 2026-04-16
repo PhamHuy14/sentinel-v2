@@ -28,6 +28,14 @@ ipcMain.handle('scan:url', async (event, payload) => {
   currentScanAbort?.abort('New scan started');
 
   const ac = new AbortController();
+  try {
+    require('events').setMaxListeners(100, ac.signal);
+  } catch (err) {
+    // Fallback if setMaxListeners is not supported
+    if (typeof ac.signal.setMaxListeners === 'function') {
+      ac.signal.setMaxListeners(100);
+    }
+  }
   currentScanAbort = ac;
 
   try {
@@ -54,6 +62,13 @@ ipcMain.handle('scan:url', async (event, payload) => {
 ipcMain.handle('scan:project', async (event, payload) => {
   currentScanAbort?.abort('New scan started');
   const ac = new AbortController();
+  try {
+    require('events').setMaxListeners(100, ac.signal);
+  } catch (err) {
+    if (typeof ac.signal.setMaxListeners === 'function') {
+      ac.signal.setMaxListeners(100);
+    }
+  }
   currentScanAbort = ac;
 
   try {

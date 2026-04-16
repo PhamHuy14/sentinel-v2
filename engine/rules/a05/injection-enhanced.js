@@ -1,27 +1,35 @@
+// engine/rules/a05/injection-enhanced.js
 const { normalizeFinding } = require('../../models/finding');
 
+/**
+ * BUG FIX: Phiên bản cũ dùng `/\b49\b/` để detect SSTI (math eval 7*7=49).
+ * Pattern này khớp bất kỳ trang nào chứa số 49 — gây FALSE POSITIVE rất cao:
+ * "49 results found", "version 1.49", "$49.99", v.v. → tất cả bị báo là SSTI critical.
+ *
+ * FIX:
+ * 1. Loại bỏ check regex `/\b49\b/` trong static heuristic (quá noisy).
+ * 2. Chỉ giữ lại SSTI_PROBE_7777 marker (marker đặc trưng hơn).
+ * 3. SSTI thực sự được detect chính xác hơn trong fuzzer.js qua `isSsti()` trong analyzer.js,
+ *    kết hợp với payload cụ thể — không dùng static scan của hàm này.
+ */
 function runSstiHeuristic(context) {
   const text = context.text || '';
-  const sstiMarkers = [
-    { re: /\b49\b/, label: 'Math expression 7*7=49 có thể được execute' },
-    { re: /SSTI_PROBE_7777/, label: 'SSTI probe marker được reflect' },
-  ];
-  for (const m of sstiMarkers) {
-    if (m.re.test(text)) {
-      return [normalizeFinding({
-        ruleId: 'A05-SSTI-001',
-        owaspCategory: 'A05',
-        title: 'Có dấu hiệu Server-Side Template Injection (SSTI)',
-        severity: 'critical',
-        confidence: 'low',
-        target: context.finalUrl,
-        location: 'response body',
-        evidence: [m.label, 'SSTI có thể dẫn đến Remote Code Execution.'],
-        remediation: 'Không dùng user input trực tiếp trong template string. Dùng sandbox hoặc static template với data binding.',
-        references: ['https://portswigger.net/web-security/server-side-template-injection'],
-        collector: 'blackbox'
-      })];
-    }
+
+  // Chỉ check marker đặc trưng — không check số 49 chung chung
+  if (/SSTI_PROBE_7777/i.test(text)) {
+    return [normalizeFinding({
+      ruleId: 'A05-SSTI-001',
+      owaspCategory: 'A05',
+      title: 'Có dấu hiệu Server-Side Template Injection (SSTI)',
+      severity: 'critical',
+      confidence: 'medium',
+      target: context.finalUrl,
+      location: 'response body',
+      evidence: ['SSTI probe marker "SSTI_PROBE_7777" được reflect/evaluate trong response — SSTI có thể dẫn đến Remote Code Execution.'],
+      remediation: 'Không dùng user input trực tiếp trong template string. Dùng sandbox hoặc static template với data binding.',
+      references: ['https://portswigger.net/web-security/server-side-template-injection'],
+      collector: 'blackbox',
+    })];
   }
   return [];
 }
@@ -51,7 +59,7 @@ function runSqliEnhanced(context) {
         evidence: [`Phát hiện error message của ${pat.db} trong response HTTP`],
         remediation: 'Dùng parameterized queries/prepared statements. Ẩn database errors, log nội bộ.',
         references: ['https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html'],
-        collector: 'blackbox'
+        collector: 'blackbox',
       }));
       break;
     }
@@ -73,7 +81,7 @@ function runNoSqliHeuristic(context) {
       evidence: ['Response chứa MongoDB/NoSQL error message'],
       remediation: 'Validate và sanitize input trước khi dùng trong MongoDB query.',
       references: ['https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/05.6-Testing_for_NoSQL_Injection'],
-      collector: 'blackbox'
+      collector: 'blackbox',
     })];
   }
   return [];
@@ -95,7 +103,7 @@ function runXxeHeuristic(context) {
       evidence: ['XML response chứa dấu hiệu file system access hoặc SSRF'],
       remediation: 'Disable XML external entity processing. Dùng safe XML parser configuration.',
       references: ['https://owasp.org/www-community/vulnerabilities/XML_External_Entity_(XXE)_Processing'],
-      collector: 'blackbox'
+      collector: 'blackbox',
     })];
   }
   return [];
@@ -115,7 +123,7 @@ function runPrototypePollutionHeuristic(context) {
       evidence: ['Response chứa __proto__ hoặc constructor key — kiểm tra prototype pollution vulnerability'],
       remediation: 'Sanitize JSON input, reject keys như __proto__, prototype, constructor.',
       references: ['https://portswigger.net/web-security/prototype-pollution'],
-      collector: 'blackbox'
+      collector: 'blackbox',
     })];
   }
   return [];

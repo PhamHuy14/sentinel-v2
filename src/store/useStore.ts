@@ -63,11 +63,6 @@ function calcRiskScore(findings: ScanResult['findings']): number {
   return Math.min(100, findings.reduce((s, f) => s + (SEV_W[f.severity] || 0), 0));
 }
 
-/**
- * Kiểm tra URL có phải local/localhost không.
- * Local URL → kết quả scan được dùng để tạo checklist.
- * Public URL → không đưa vào checklist.
- */
 export function isLocalUrl(url: string): boolean {
   if (!url) return false;
   try {
@@ -78,7 +73,6 @@ export function isLocalUrl(url: string): boolean {
       h === '127.0.0.1' ||
       h === '::1' ||
       h.endsWith('.localhost') ||
-      // Private IPv4 ranges
       /^10\./.test(h) ||
       /^192\.168\./.test(h) ||
       /^172\.(1[6-9]|2\d|3[01])\./.test(h)
@@ -88,32 +82,19 @@ export function isLocalUrl(url: string): boolean {
   }
 }
 
-/**
- * Gộp findings từ URL scan (local) và Project scan, loại bỏ trùng lặp.
- * Hai finding được coi là trùng nếu có cùng ruleId + owaspCategory + severity.
- */
 export function mergeFindings(urlFindings: Finding[], projectFindings: Finding[]): Finding[] {
   const seen = new Set<string>();
   const result: Finding[] = [];
-
   const makeKey = (f: Finding) => `${f.ruleId}||${f.owaspCategory}||${f.severity}`;
 
   for (const f of urlFindings) {
     const key = makeKey(f);
-    if (!seen.has(key)) {
-      seen.add(key);
-      result.push(f);
-    }
+    if (!seen.has(key)) { seen.add(key); result.push(f); }
   }
-
   for (const f of projectFindings) {
     const key = makeKey(f);
-    if (!seen.has(key)) {
-      seen.add(key);
-      result.push(f);
-    }
+    if (!seen.has(key)) { seen.add(key); result.push(f); }
   }
-
   return result;
 }
 
@@ -129,48 +110,31 @@ interface AppState {
   urlScanResult: ScanResult | null;
   projectScanResult: ScanResult | null;
   error: string | null;
-
-  /** true nếu URL scan hiện tại là local/localhost → dùng để tạo checklist */
   urlScanIsLocal: boolean;
-
-  /**
-   * Trả về merged findings từ cả URL scan (nếu local) + Project scan.
-   * Dùng cho ChecklistPanel để tạo checklist đầy đủ.
-   */
   getCombinedFindings: () => Finding[];
-
   checkedChecklistItems: string[];
   toggleChecklistItem: (id: string) => void;
-
   urlInput: string;
   authConfig: AuthConfig;
   setUrlInput: (url: string) => void;
   setAuthConfig: (config: Partial<AuthConfig>) => void;
-
   crawlDepth: number;
   requestBudget: number;
   setCrawlDepth: (n: number) => void;
   setRequestBudget: (n: number) => void;
-
   selectedFolder: string | null;
   setSelectedFolder: (folder: string | null) => void;
-
   checklist: ChecklistData | null;
-
   progressLog: ScanProgressEvent[];
   appendProgress: (ev: ScanProgressEvent) => void;
   clearProgress: () => void;
-
   history: ScanHistoryEntry[];
   loadHistory: () => Promise<void>;
   saveToHistory: (result: ScanResult) => Promise<void>;
   restoreFromHistory: (id: string) => void;
   clearHistory: () => Promise<void>;
-
   showHistoryDropdown: boolean;
   setShowHistoryDropdown: (show: boolean) => void;
-
-  // ── Actions ────────────────────────────────────────────────
   performUrlScan: () => Promise<void>;
   performProjectScan: () => Promise<void>;
   stopScan: () => Promise<void>;
@@ -180,13 +144,19 @@ interface AppState {
   resetProjectScanResult: () => void;
   exportReport: (format: 'json' | 'html') => Promise<void>;
 
-  _progressListener: ((_e: ScanProgressEvent) => void) | null;
+  // BUG FIX: Phiên bản cũ lưu `cb` (callback người dùng) vào _progressListener.
+  // Nhưng `onScanProgress(cb)` trong preload.js tạo ra một inner listener wrapper
+  //   `const listener = (_e, msg) => cb(msg);`
+  // và RETURN về listener đó. `offScanProgress` cần đúng listener này để removeListener.
+  // Nếu ta truyền `cb` vào offScanProgress → ipcRenderer.removeListener('scan:progress', cb)
+  // → KHÔNG TÌM THẤY listener, không remove được → listener leak sau mỗi lần scan.
+  // FIX: lưu GIÁ TRỊ TRẢ VỀ của onScanProgress() thay vì lưu cb.
+  _progressListener: unknown | null;
 }
 
 export const useStore = create<AppState>((set, get) => ({
   activeTab:  'url',
   setActiveTab: (tab) => set({ activeTab: tab }),
-
   isLoading: false,
   urlScanResult: null,
   projectScanResult: null,
@@ -195,8 +165,8 @@ export const useStore = create<AppState>((set, get) => ({
 
   getCombinedFindings: () => {
     const { urlScanResult, projectScanResult, urlScanIsLocal } = get();
-    const urlFindings   = urlScanIsLocal ? (urlScanResult?.findings ?? []) : [];
-    const projFindings  = projectScanResult?.findings ?? [];
+    const urlFindings  = urlScanIsLocal ? (urlScanResult?.findings ?? []) : [];
+    const projFindings = projectScanResult?.findings ?? [];
     return mergeFindings(urlFindings, projFindings);
   },
 
@@ -204,7 +174,7 @@ export const useStore = create<AppState>((set, get) => ({
   toggleChecklistItem: (id) => set((s) => ({
     checkedChecklistItems: s.checkedChecklistItems.includes(id)
       ? s.checkedChecklistItems.filter(i => i !== id)
-      : [...s.checkedChecklistItems, id]
+      : [...s.checkedChecklistItems, id],
   })),
 
   urlInput: '',
@@ -263,6 +233,7 @@ export const useStore = create<AppState>((set, get) => ({
       }
     }
   },
+
   clearHistory: async () => {
     set({ history: [] });
     await saveHistoryToDB([]);
@@ -282,8 +253,10 @@ export const useStore = create<AppState>((set, get) => ({
 
     try {
       const cb = (ev: ScanProgressEvent) => get().appendProgress(ev);
-      window.owaspWorkbench?.onScanProgress?.(cb);
-      set({ _progressListener: cb });
+      // BUG FIX: Lưu GIÁ TRỊ TRẢ VỀ của onScanProgress (là inner ipcRenderer listener),
+      // không phải lưu `cb`. offScanProgress cần đúng reference này để removeListener.
+      const listenerRef = window.owaspWorkbench?.onScanProgress?.(cb);
+      set({ _progressListener: listenerRef ?? null });
     } catch (_e) { void 0; }
 
     try {
@@ -299,8 +272,9 @@ export const useStore = create<AppState>((set, get) => ({
       set({ error: (err instanceof Error ? err.message : String(err)) || 'Lỗi không xác định' });
     } finally {
       try {
-        const listener = get()._progressListener;
-        window.owaspWorkbench?.offScanProgress?.(listener ?? undefined);
+        // BUG FIX: truyền đúng listenerRef (returned từ onScanProgress) vào offScanProgress
+        const listenerRef = get()._progressListener;
+        window.owaspWorkbench?.offScanProgress?.(listenerRef ?? undefined);
       } catch (_e) { void 0; }
       set({ isLoading: false, _progressListener: null });
     }
@@ -314,8 +288,9 @@ export const useStore = create<AppState>((set, get) => ({
 
     try {
       const cb = (ev: ScanProgressEvent) => get().appendProgress(ev);
-      window.owaspWorkbench?.onScanProgress?.(cb);
-      set({ _progressListener: cb });
+      // BUG FIX: tương tự performUrlScan — lưu returned listener ref
+      const listenerRef = window.owaspWorkbench?.onScanProgress?.(cb);
+      set({ _progressListener: listenerRef ?? null });
     } catch (_e) { void 0; }
 
     try {
@@ -326,8 +301,8 @@ export const useStore = create<AppState>((set, get) => ({
       set({ error: (err instanceof Error ? err.message : String(err)) || 'Lỗi không xác định' });
     } finally {
       try {
-        const listener = get()._progressListener;
-        window.owaspWorkbench?.offScanProgress?.(listener ?? undefined);
+        const listenerRef = get()._progressListener;
+        window.owaspWorkbench?.offScanProgress?.(listenerRef ?? undefined);
       } catch (_e) { void 0; }
       set({ isLoading: false, _progressListener: null });
     }
@@ -337,12 +312,12 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       await window.owaspWorkbench?.stopScan?.();
     } catch (_e) { void 0; }
-    set({ isLoading: false, error: 'Scan đã bị hủy bởi người dùng.' });
+    // Cleanup listener trước khi set isLoading: false
     try {
-      const listener = get()._progressListener;
-      window.owaspWorkbench?.offScanProgress?.(listener ?? undefined);
+      const listenerRef = get()._progressListener;
+      window.owaspWorkbench?.offScanProgress?.(listenerRef ?? undefined);
     } catch (_e) { void 0; }
-    set({ _progressListener: null });
+    set({ isLoading: false, error: 'Scan đã bị hủy bởi người dùng.', _progressListener: null });
   },
 
   loadChecklist: async () => {
@@ -350,7 +325,9 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       const r = await ipc().getChecklist();
       if (r.ok && r.data) set({ checklist: r.data });
-    } catch (err: Error | unknown) { console.warn('Checklist unavailable:', err instanceof Error ? err.message : String(err)); }
+    } catch (err: Error | unknown) {
+      console.warn('Checklist unavailable:', err instanceof Error ? err.message : String(err));
+    }
   },
 
   resetScan: () => {
