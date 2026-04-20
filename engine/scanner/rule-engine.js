@@ -1,10 +1,7 @@
 // engine/scanner/rule-engine.js
 
 // ── A01 ──────────────────────────────────────────────────────────────────────
-const { runCsrfHeuristic } = require('../rules/a01/csrf-heuristic');
-const { runIdorHeuristic } = require('../rules/a01/idor-heuristic');
-const { runForcedBrowsing } = require('../rules/a01/forced-browsing');
-const { runJwtWeakness, runPathTraversalHeuristic, runSensitiveEndpointExposure, runMassAssignmentHeuristic } = require('../rules/a01/access-control-enhanced');
+const { runAllA01Rules } = require('../rules/a01');
 
 // ── A02 ──────────────────────────────────────────────────────────────────────
 const { runMissingSecurityHeaders } = require('../rules/a02/missing-security-headers');
@@ -60,13 +57,7 @@ function deduplicateFindings(findings) {
 
 function runUrlRules(context) {
   const findings = [
-    ...runCsrfHeuristic(context),
-    ...runIdorHeuristic(context),
-    ...runForcedBrowsing(context),
-    ...runSensitiveEndpointExposure(context),
-    ...runJwtWeakness(context),
-    ...runPathTraversalHeuristic(context),
-    ...runMassAssignmentHeuristic(context),
+    ...runAllA01Rules(context),
     ...runMissingSecurityHeaders(context),
     ...runCookieFlags(context),
     ...runCorsMisconfig(context),

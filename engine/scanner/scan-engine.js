@@ -401,8 +401,12 @@ async function runUrlScan(inputUrl, options = {}) {
 
   const context = {
     scannedUrl: parsed.toString(), finalUrl, origin: parsed.origin,
+    queryString: parsed.search || '',
+    method: 'GET',
     protocol: parsed.protocol, hostname, isLocalhost,
-    status: response.status, text, headers, requestHeaders,
+    status: response.status, statusCode: response.status, text, headers, requestHeaders,
+    responseHeaders: toHeaderObject(headers),
+    requestBody: '',
     setCookies, cookieFlags, contentType: headers.get('content-type') || '',
     forms: allForms, links: [...allLinks],
     authHints, allowMethods: optionsProbe.allow, missingPathProbe,
