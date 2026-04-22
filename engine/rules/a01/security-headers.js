@@ -1,17 +1,17 @@
 /**
- * Security Headers & Cache Control Heuristic
- * OWASP References:
- *   - OTG-AUTHN-006: Testing for Browser Cache Weakness
- *   - OTG-CONFIG-007: Test HTTP Strict Transport Security
- *   - Supplementary: Missing security headers related to A01/A05
+ * Quy tắc kinh nghiệm về tiêu đề bảo mật và Cache Control
+ * Tham chiếu OWASP:
+ *   - OTG-AUTHN-006: Kiểm thử điểm yếu cache của trình duyệt
+ *   - OTG-CONFIG-007: Kiểm thử HTTP Strict Transport Security
+ *   - Bổ sung: Thiếu tiêu đề bảo mật liên quan A01/A05
  *
- * Checks for missing/misconfigured HTTP security headers that
- * increase the attack surface for access control bypass.
+ * Kiểm tra tiêu đề bảo mật HTTP bị thiếu/cấu hình sai,
+ * làm tăng bề mặt tấn công cho việc vượt qua kiểm soát truy cập.
  */
 
 const { normalizeFinding } = require('../../models/finding');
 
-// Pages/paths that are likely to contain sensitive content
+// Trang/đường dẫn có khả năng chứa nội dung nhạy cảm
 const SENSITIVE_PATH_PATTERNS = [
   /\/(login|signin|auth|logout|account|profile|dashboard|admin|payment|checkout|order|invoice)/i,
   /\/(api|v\d+)\/(user|account|order|payment|auth)/i,
@@ -31,14 +31,14 @@ function runSecurityHeadersHeuristic(context) {
   const isHttps = url.startsWith('https://');
   const isSensitive = isSensitivePath(url);
 
-  // Normalise header names to lowercase for lookup
+  // Chuẩn hóa tên header về chữ thường để tra cứu
   const h = {};
   for (const [k, v] of Object.entries(headers)) {
     h[k.toLowerCase()] = v;
   }
 
   // ----------------------------------------------------------------
-  // 1. Cache-Control on sensitive pages (OTG-AUTHN-006)
+  // 1. Cache-Control trên trang nhạy cảm (OTG-AUTHN-006)
   // ----------------------------------------------------------------
   if (isSensitive && (isHtml || isJson)) {
     const cacheControl = (h['cache-control'] || '').toLowerCase();
@@ -106,11 +106,11 @@ function runSecurityHeadersHeuristic(context) {
         collector: 'blackbox',
       }));
     } else {
-      // Check max-age value
+      // Kiểm tra giá trị max-age
       const maxAgeMatch = hsts.match(/max-age=(\d+)/i);
       if (maxAgeMatch) {
         const maxAge = parseInt(maxAgeMatch[1], 10);
-        if (maxAge < 15552000) { // Less than 180 days
+        if (maxAge < 15552000) { // Nhỏ hơn 180 ngày
           findings.push(normalizeFinding({
             ruleId: 'A01-HSTS-002',
             owaspCategory: 'A01',
@@ -135,7 +135,7 @@ function runSecurityHeadersHeuristic(context) {
   }
 
   // ----------------------------------------------------------------
-  // 3. X-Frame-Options / CSP frame-ancestors (Clickjacking — A01 indirect)
+  // 3. X-Frame-Options / CSP frame-ancestors (Clickjacking, liên quan gián tiếp A01)
   // ----------------------------------------------------------------
   if (isHtml && isSensitive) {
     const xfo = h['x-frame-options'] || '';
@@ -196,7 +196,7 @@ function runSecurityHeadersHeuristic(context) {
   }
 
   // ----------------------------------------------------------------
-  // 5. CORS misconfiguration (relates to CSRF and A01)
+  // 5. CORS misconfiguration (liên quan CSRF và A01)
   // ----------------------------------------------------------------
   const acao = h['access-control-allow-origin'] || '';
   const acac = h['access-control-allow-credentials'] || '';
@@ -227,7 +227,7 @@ function runSecurityHeadersHeuristic(context) {
       collector: 'blackbox',
     }));
   } else if (acao && acao !== '*') {
-    // Check if origin reflects back attacker-controlled value
+    // Kiểm tra xem origin có bị phản chiếu theo giá trị do attacker điều khiển không
     const requestOrigin = context.requestHeaders?.Origin || '';
     if (requestOrigin && acao === requestOrigin && acac.toLowerCase() === 'true') {
       findings.push(normalizeFinding({

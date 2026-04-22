@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useStore } from '../store/useStore';
-import { ChecklistItem } from './ChecklistPanel';
 import { ScanResult } from '../types';
+import { ChecklistItem } from './ChecklistPanel';
 
 // ─── Design Review questions + details ────────────────────────────────────────
 const DESIGN_QUESTIONS = [
@@ -104,6 +104,7 @@ export const ChecklistRightPanel: React.FC = () => {
   const { checkedChecklistItems } = useStore();
   const designIds = designQuestions.map((_, i) => `design-${i}`);
   const doneCount = designIds.filter(id => checkedChecklistItems.includes(id)).length;
+  const completionRate = Math.round((doneCount / Math.max(1, designQuestions.length)) * 100);
 
   if (!hasAny) {
     return (
@@ -122,125 +123,112 @@ export const ChecklistRightPanel: React.FC = () => {
   }
 
   return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-      {/* ── Layout 2 cột bên trong right panel ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, alignItems: 'start' }}>
-
-        {/* Cột trái: Design Review */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div className="section" style={{ flex: 1 }}>
-            <div className="chk-section-header">
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <div className="section-label" style={{ marginBottom: 0 }}>Đánh giá thiết kế</div>
-                {/* Progress bar */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ flex: 1, height: 4, background: 'var(--border)', borderRadius: 4, overflow: 'hidden' }}>
-                    <div style={{
-                      width: `${(doneCount / designQuestions.length) * 100}%`,
-                      height: '100%', background: 'var(--accent)', borderRadius: 4,
-                      transition: 'width 0.3s ease',
-                    }} />
-                  </div>
-                  <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
-                    {doneCount}/{designQuestions.length}
-                  </span>
-                </div>
-              </div>
-              <button
-                className="btn-checklist-toggle"
-                onClick={() => setHideCompleted(v => !v)}
-                title={hideCompleted ? 'Hiện mục đã hoàn thành' : 'Ẩn mục đã hoàn thành'}
-              >
-                {hideCompleted ? '👁️ Hiện' : '🙈 Ẩn'} mục đã xong
-              </button>
+    <div className="checklist-shell checklist-shell-v3">
+      <div className="checklist-summary-grid">
+        {hasUrlLocal && urlScanResult && (
+          <div className="section checklist-summary-card">
+            <div className="checklist-summary-head">
+              <div className="section-label" style={{ marginBottom: 0 }}>URL Scan</div>
+              <span className="checklist-summary-badge">localhost</span>
             </div>
-
-            <div className="chk-items-list" style={{ marginTop: 10 }}>
-              {designQuestions.map((q, i) => (
-                <ChecklistItem
-                  key={`design-${i}`}
-                  id={`design-${i}`}
-                  label={q}
-                  hideCompleted={hideCompleted}
-                  todos={DESIGN_QUESTION_DETAILS[i]?.todos}
-                  recommend={DESIGN_QUESTION_DETAILS[i]?.recommend}
-                />
-              ))}
+            <div className="checklist-summary-target">
+              {urlScanResult.scannedUrl || urlInput}
             </div>
+            <ScanSummaryBlock scanResult={urlScanResult} />
           </div>
-        </div>
+        )}
 
-        {/* Cột phải: Scan summaries */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-
-          {/* URL Scan summary */}
-          {hasUrlLocal && urlScanResult && (
-            <div className="section">
-              <div className="section-label" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                🌐 URL Scan
-                <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: 'var(--accent)', color: '#fff', fontWeight: 500 }}>
-                  localhost
-                </span>
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 10 }}>
-                {urlScanResult.scannedUrl || urlInput}
-              </div>
-              <ScanSummaryBlock scanResult={urlScanResult} />
+        {hasProjectScan && projectScanResult && (
+          <div className="section checklist-summary-card">
+            <div className="checklist-summary-head">
+              <div className="section-label" style={{ marginBottom: 0 }}>Project Scan</div>
             </div>
-          )}
-
-          {/* Project Scan summary */}
-          {hasProjectScan && projectScanResult && (
-            <div className="section">
-              <div className="section-label" style={{ marginBottom: 10 }}>📂 Project Scan</div>
-              <ScanSummaryBlock scanResult={projectScanResult} />
-              {projectScanResult.metadata?.scannedFiles !== undefined && (
-                <div className="meta-table" style={{ marginTop: 10 }}>
-                  <div className="meta-row">
-                    <span className="meta-key">Số file đã quét</span>
-                    <span className="meta-val">{projectScanResult.metadata.scannedFiles}</span>
-                  </div>
-                  {projectScanResult.metadata.packageJsonFound !== undefined && (
-                    <div className="meta-row">
-                      <span className="meta-key">package.json</span>
-                      <span className={`meta-val ${projectScanResult.metadata.packageJsonFound ? 'ok' : ''}`}>
-                        {projectScanResult.metadata.packageJsonFound ? 'Có' : 'Không'}
-                      </span>
-                    </div>
-                  )}
-                  {projectScanResult.metadata.configCount !== undefined && (
-                    <div className="meta-row">
-                      <span className="meta-key">File cấu hình</span>
-                      <span className="meta-val">{projectScanResult.metadata.configCount}</span>
-                    </div>
-                  )}
-                  <div className="meta-row">
-                    <span className="meta-key">Tổng số findings</span>
-                    <span className="meta-val">{projectScanResult.findings.length}</span>
-                  </div>
+            <ScanSummaryBlock scanResult={projectScanResult} />
+            {projectScanResult.metadata?.scannedFiles !== undefined && (
+              <div className="meta-table" style={{ marginTop: 10 }}>
+                <div className="meta-row">
+                  <span className="meta-key">Số file đã quét</span>
+                  <span className="meta-val">{projectScanResult.metadata.scannedFiles}</span>
                 </div>
-              )}
-            </div>
-          )}
+                {projectScanResult.metadata.packageJsonFound !== undefined && (
+                  <div className="meta-row">
+                    <span className="meta-key">package.json</span>
+                    <span className={`meta-val ${projectScanResult.metadata.packageJsonFound ? 'ok' : ''}`}>
+                      {projectScanResult.metadata.packageJsonFound ? 'Có' : 'Không'}
+                    </span>
+                  </div>
+                )}
+                {projectScanResult.metadata.configCount !== undefined && (
+                  <div className="meta-row">
+                    <span className="meta-key">File cấu hình</span>
+                    <span className="meta-val">{projectScanResult.metadata.configCount}</span>
+                  </div>
+                )}
+                <div className="meta-row">
+                  <span className="meta-key">Tổng số findings</span>
+                  <span className="meta-val">{projectScanResult.findings.length}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
-          {/* Combined tip */}
-          {hasUrlLocal && hasProjectScan && (
-            <div style={{ background: 'var(--accent-bg, rgba(99,102,241,0.08))', border: '1px solid var(--accent)', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>
-              <span style={{ color: 'var(--accent)', fontWeight: 600 }}>🔗 Checklist kết hợp.</span>{' '}
-              Findings từ cả hai nguồn đã được gộp — trùng lặp chỉ hiện một lần.
-            </div>
-          )}
-
-          {/* Single source tip */}
-          {(!hasUrlLocal || !hasProjectScan) && (
-            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: 'var(--text-3)', lineHeight: 1.6 }}>
-              <span style={{ color: 'var(--med)', fontWeight: 600 }}>💡 Tip: </span>
+        <div className="checklist-summary-tip section">
+          {hasUrlLocal && hasProjectScan ? (
+            <>
+              <span className="checklist-tip-title">Checklist kết hợp.</span>{' '}
+              Findings từ cả hai nguồn đã được gộp, mục trùng lặp chỉ hiển thị một lần.
+            </>
+          ) : (
+            <>
+              <span className="checklist-tip-title">Tip:</span>{' '}
               {!hasUrlLocal
                 ? 'Chạy thêm URL Scan (localhost) để phát hiện lỗi runtime và kết hợp vào checklist.'
                 : 'Chạy thêm Project Scan để phát hiện lỗi source code và kết hợp vào checklist.'}
-            </div>
+            </>
           )}
+        </div>
+      </div>
+
+      <div className="section checklist-review-panel">
+        <div className="chk-section-header checklist-review-head">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0, flex: 1 }}>
+            <div className="section-label" style={{ marginBottom: 0 }}>Đánh giá thiết kế</div>
+            <div className="checklist-progress-row">
+              <div className="checklist-progress-track">
+                <div
+                  style={{
+                    width: `${(doneCount / designQuestions.length) * 100}%`,
+                    height: '100%'
+                  }}
+                  className="checklist-progress-fill"
+                />
+              </div>
+              <span className="checklist-progress-badge">
+                {doneCount}/{designQuestions.length} · {completionRate}%
+              </span>
+            </div>
+          </div>
+          <button
+            className="btn-checklist-toggle"
+            onClick={() => setHideCompleted(v => !v)}
+            title={hideCompleted ? 'Hiện mục đã hoàn thành' : 'Ẩn mục đã hoàn thành'}
+          >
+            {hideCompleted ? 'Hiện đủ' : 'Ẩn đã xong'}
+          </button>
+        </div>
+
+        <div className="chk-items-list" style={{ marginTop: 10 }}>
+          {designQuestions.map((q, i) => (
+            <ChecklistItem
+              key={`design-${i}`}
+              id={`design-${i}`}
+              label={q}
+              hideCompleted={hideCompleted}
+              todos={DESIGN_QUESTION_DETAILS[i]?.todos}
+              recommend={DESIGN_QUESTION_DETAILS[i]?.recommend}
+            />
+          ))}
         </div>
       </div>
     </div>

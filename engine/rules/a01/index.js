@@ -1,9 +1,8 @@
 /**
- * A01 Rules Index
- * ═══════════════════════════════════════════════════════════════════════════
- * Tập hợp tất cả rules cho OWASP A01 - Broken Access Control
+ * Chỉ mục quy tắc A01.
+ * Tập hợp toàn bộ quy tắc cho OWASP A01 - Broken Access Control.
  *
- * CÁCH SỬ DỤNG:
+ * Cách dùng:
  * Require file này và gọi runAllA01Rules(context) để chạy toàn bộ,
  * hoặc require từng module riêng lẻ.
  */
@@ -21,35 +20,35 @@ const { runSessionManagementHeuristic } = require('./session-management');
 const { runSecurityHeadersHeuristic } = require('./security-headers');
 
 /**
- * Danh sách tất cả rules theo thứ tự ưu tiên.
- * Mỗi entry: { fn, name, owasp }
+ * Danh sách toàn bộ quy tắc theo thứ tự ưu tiên.
+ * Mỗi phần tử: { fn, name, owasp }
  */
 const ALL_A01_RULES = [
-  // ── Critical / High confidence ──────────────────────────────────────────
+  // Nhóm mức critical hoặc độ tin cậy cao.
   { fn: runPathTraversalHeuristic,       name: 'PathTraversal',         owasp: 'OTG-AUTHZ-001' },
   { fn: runAuthBypassHeuristic,          name: 'AuthBypass',            owasp: 'OTG-AUTHN-004' },
   { fn: runPrivilegeEscalationHeuristic, name: 'PrivilegeEscalation',   owasp: 'OTG-AUTHZ-003' },
   { fn: runJwtWeakness,                  name: 'JwtWeakness',           owasp: 'OTG-AUTHN'     },
 
-  // ── Access control surface ───────────────────────────────────────────────
+  // Nhóm bề mặt kiểm soát truy cập.
   { fn: runSensitiveEndpointExposure,    name: 'SensitiveEndpoint',     owasp: 'OTG-CONFIG-005' },
   { fn: runForcedBrowsing,               name: 'ForcedBrowsing',        owasp: 'OTG-AUTHZ-002' },
   { fn: runIdorHeuristic,                name: 'IDOR',                  owasp: 'OTG-AUTHZ-004' },
   { fn: runMassAssignmentHeuristic,      name: 'MassAssignment',        owasp: 'OTG-AUTHZ-003' },
 
-  // ── Session & CSRF ──────────────────────────────────────────────────────
+  // Nhóm session và CSRF.
   { fn: runSessionManagementHeuristic,   name: 'SessionManagement',     owasp: 'OTG-SESS-001'  },
   { fn: runCsrfHeuristic,                name: 'CSRF',                  owasp: 'OTG-SESS-005'  },
 
-  // ── HTTP configuration ──────────────────────────────────────────────────
+  // Nhóm cấu hình HTTP.
   { fn: runHttpVerbTampering,            name: 'HttpVerbTampering',     owasp: 'OTG-CONFIG-006' },
   { fn: runSecurityHeadersHeuristic,     name: 'SecurityHeaders',       owasp: 'OTG-AUTHN-006' },
 ];
 
 /**
- * Chạy tất cả A01 rules và trả về array findings (flattened, deduplicated).
+ * Chạy toàn bộ quy tắc A01 và trả về mảng findings (đã làm phẳng, đã khử trùng lặp).
  * @param {object} context
- * @returns {Array} findings
+ * @returns {Array} danh sách phát hiện
  */
 function runAllA01Rules(context) {
   const allFindings = [];
@@ -59,7 +58,7 @@ function runAllA01Rules(context) {
     try {
       const results = fn(context) || [];
       for (const finding of results) {
-        // Simple dedup: same ruleId + same target
+        // Khử trùng lặp đơn giản: cùng ruleId + cùng target
         const key = `${finding.ruleId}::${finding.target}`;
         if (!seenEvidence.has(key)) {
           seenEvidence.add(key);
@@ -67,7 +66,7 @@ function runAllA01Rules(context) {
         }
       }
     } catch (err) {
-      // Don't let one rule crash the whole pipeline
+      // Không để một quy tắc làm hỏng toàn bộ luồng xử lý
       if (process.env.DEBUG_RULES) {
         console.error(`[A01 Rules] Error in ${name}:`, err.message);
       }
@@ -79,7 +78,7 @@ function runAllA01Rules(context) {
 
 module.exports = {
   runAllA01Rules,
-  // Also export individual runners for selective use
+  // Đồng thời export từng runner để dùng chọn lọc
   runJwtWeakness,
   runPathTraversalHeuristic,
   runSensitiveEndpointExposure,

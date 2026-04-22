@@ -12,6 +12,13 @@ const ICONS: Record<string, string> = {
   error:   '✗',
 };
 const STAGES = ['crawl', 'probe', 'analyze', 'fuzz', 'done'];
+const STAGE_PROGRESS: Record<string, number> = {
+  crawl: 20,
+  probe: 40,
+  analyze: 65,
+  fuzz: 85,
+  done: 100,
+};
 
 export const ScanProgress: React.FC = () => {
   const { progressLog, stopScan, isLoading } = useStore();
@@ -24,12 +31,27 @@ export const ScanProgress: React.FC = () => {
   const activeStage: string = progressLog.length > 0 ? progressLog[progressLog.length - 1].stage : '';
   const doneStages = new Set(progressLog.map((e) => e.stage));
   const logCount = progressLog.length;
+  const progressPercent = STAGE_PROGRESS[activeStage] || (progressLog.length > 0 ? 10 : 0);
+  const firstTs = progressLog.length > 0 ? progressLog[0].ts : Date.now();
+  const elapsedSec = Math.max(0, Math.floor((Date.now() - firstTs) / 1000));
+  const etaSec = progressPercent > 5 && progressPercent < 100
+    ? Math.max(0, Math.round((elapsedSec / progressPercent) * (100 - progressPercent)))
+    : 0;
+
+  const formatSec = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}:${sec.toString().padStart(2, '0')}`;
+  };
 
   return (
     <div className="progress-panel">
       <div className="progress-panel-hdr">
         <div className="spinner-sm" />
         <span className="progress-panel-title">Đang quét…</span>
+        <span className="progress-head-meta">{progressPercent}%</span>
+        <span className="progress-head-meta">Đã chạy {formatSec(elapsedSec)}</span>
+        {etaSec > 0 && <span className="progress-head-meta">ETA ~ {formatSec(etaSec)}</span>}
         <div style={{ flex: 1 }} />
         <span className="log-count-badge">{logCount} sự kiện</span>
         {isLoading && (
@@ -41,6 +63,10 @@ export const ScanProgress: React.FC = () => {
             ■ Dừng
           </button>
         )}
+      </div>
+
+      <div className="progress-track-wrap" aria-label="Tiến trình quét tổng thể">
+        <div className="progress-track-fill" style={{ width: `${progressPercent}%` }} />
       </div>
 
       {/* Pipeline các giai đoạn quét */}

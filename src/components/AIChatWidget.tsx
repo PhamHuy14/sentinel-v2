@@ -718,12 +718,6 @@ export function AIChatWidget() {
                   {placeholderHint}
                 </span>
               )}
-              {/* Tiền tố tĩnh khi ô nhập trống và chưa được focus */}
-              {!input && !inputFocused && (
-                <span className="ai-input-prefix" aria-hidden="true">
-                  Hỏi về bảo mật...
-                </span>
-              )}
             </div>
 
             <button

@@ -2,8 +2,54 @@ import { create } from 'zustand';
 import { AuthConfig, ChecklistData, Finding, ScanHistoryEntry, ScanProgressEvent, ScanResult } from '../types';
 
 const HISTORY_KEY  = 'sentinel_v2_history';
+const THEME_KEY    = 'sentinel_v2_theme';
+const FINDING_STATUS_KEY = 'sentinel_v2_finding_statuses';
+const RESULTS_DENSITY_KEY = 'sentinel_v2_results_density';
 const MAX_HISTORY  = 10;
 const MAX_LOG      = 200;
+
+type ThemeMode = 'dark' | 'light';
+type FindingStatus = 'new' | 'triaged' | 'in-progress' | 'mitigated';
+type ResultsDensity = 'comfort' | 'compact';
+
+function getInitialTheme(): ThemeMode {
+  try {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored === 'dark' || stored === 'light') return stored;
+  } catch (_e) { void 0; }
+  return 'dark';
+}
+
+function getInitialFindingStatuses(): Record<string, FindingStatus> {
+  try {
+    const raw = localStorage.getItem(FINDING_STATUS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, string>;
+    const out: Record<string, FindingStatus> = {};
+    for (const [k, v] of Object.entries(parsed)) {
+      if (v === 'new' || v === 'triaged' || v === 'in-progress' || v === 'mitigated') {
+        out[k] = v;
+      }
+    }
+    return out;
+  } catch (_e) {
+    return {};
+  }
+}
+
+function saveFindingStatuses(map: Record<string, FindingStatus>) {
+  try {
+    localStorage.setItem(FINDING_STATUS_KEY, JSON.stringify(map));
+  } catch (_e) { void 0; }
+}
+
+function getInitialResultsDensity(): ResultsDensity {
+  try {
+    const raw = localStorage.getItem(RESULTS_DENSITY_KEY);
+    if (raw === 'compact' || raw === 'comfort') return raw;
+  } catch (_e) { void 0; }
+  return 'comfort';
+}
 
 // ── IndexedDB helpers ──────────────────────────────────────────────────────
 const DB_NAME = 'SentinelV2DB';
@@ -135,6 +181,15 @@ interface AppState {
   clearHistory: () => Promise<void>;
   showHistoryDropdown: boolean;
   setShowHistoryDropdown: (show: boolean) => void;
+  themeMode: ThemeMode;
+  setThemeMode: (mode: ThemeMode) => void;
+  toggleThemeMode: () => void;
+  resultsDensity: ResultsDensity;
+  setResultsDensity: (mode: ResultsDensity) => void;
+  findingStatuses: Record<string, FindingStatus>;
+  setFindingStatus: (scopeKey: string, findingKey: string, status: FindingStatus) => void;
+  getFindingStatus: (scopeKey: string, findingKey: string) => FindingStatus | undefined;
+  clearFindingStatuses: (scopeKey?: string) => void;
   performUrlScan: () => Promise<void>;
   performProjectScan: () => Promise<void>;
   stopScan: () => Promise<void>;
@@ -241,6 +296,53 @@ export const useStore = create<AppState>((set, get) => ({
 
   showHistoryDropdown: false,
   setShowHistoryDropdown: (show) => set({ showHistoryDropdown: show }),
+
+  themeMode: getInitialTheme(),
+  setThemeMode: (mode) => {
+    try { localStorage.setItem(THEME_KEY, mode); } catch (_e) { void 0; }
+    set({ themeMode: mode });
+  },
+  toggleThemeMode: () => {
+    const next = get().themeMode === 'dark' ? 'light' : 'dark';
+    try { localStorage.setItem(THEME_KEY, next); } catch (_e) { void 0; }
+    set({ themeMode: next });
+  },
+
+  resultsDensity: getInitialResultsDensity(),
+  setResultsDensity: (mode) => {
+    try { localStorage.setItem(RESULTS_DENSITY_KEY, mode); } catch (_e) { void 0; }
+    set({ resultsDensity: mode });
+  },
+
+  findingStatuses: getInitialFindingStatuses(),
+  setFindingStatus: (scopeKey, findingKey, status) => {
+    const id = `${scopeKey}::${findingKey}`;
+    set((s) => {
+      const next = { ...s.findingStatuses, [id]: status };
+      saveFindingStatuses(next);
+      return { findingStatuses: next };
+    });
+  },
+  getFindingStatus: (scopeKey, findingKey) => {
+    const id = `${scopeKey}::${findingKey}`;
+    return get().findingStatuses[id];
+  },
+  clearFindingStatuses: (scopeKey) => {
+    if (!scopeKey) {
+      saveFindingStatuses({});
+      set({ findingStatuses: {} });
+      return;
+    }
+    set((s) => {
+      const next: Record<string, FindingStatus> = {};
+      const scopePrefix = `${scopeKey}::`;
+      for (const [k, v] of Object.entries(s.findingStatuses)) {
+        if (!k.startsWith(scopePrefix)) next[k] = v;
+      }
+      saveFindingStatuses(next);
+      return { findingStatuses: next };
+    });
+  },
 
   _progressListener: null,
 

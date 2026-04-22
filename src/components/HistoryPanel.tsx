@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { useStore } from '../store/useStore';
 
 function timeAgo(ts: number): string {
@@ -20,6 +20,19 @@ function riskScoreColor(score?: number): string {
 
 export const HistoryPanel: React.FC = () => {
   const { history, restoreFromHistory, clearHistory, setShowHistoryDropdown } = useStore();
+  const [query, setQuery] = useState('');
+  const [modeFilter, setModeFilter] = useState<'all' | 'url-scan' | 'project-scan'>('all');
+
+  const visibleHistory = useMemo(() => {
+    return history.filter((entry) => {
+      const byMode = modeFilter === 'all' || entry.mode === modeFilter;
+      const byText =
+        query.trim().length === 0 ||
+        entry.target.toLowerCase().includes(query.toLowerCase()) ||
+        entry.mode.toLowerCase().includes(query.toLowerCase());
+      return byMode && byText;
+    });
+  }, [history, modeFilter, query]);
 
   return (
     <>
@@ -52,6 +65,25 @@ export const HistoryPanel: React.FC = () => {
           </div>
         </div>
 
+        <div className="hist-tools">
+          <input
+            className="hist-search"
+            type="text"
+            placeholder="Tìm mục tiêu scan..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          <select
+            className="hist-filter"
+            value={modeFilter}
+            onChange={(e) => setModeFilter(e.target.value as 'all' | 'url-scan' | 'project-scan')}
+          >
+            <option value="all">Tất cả</option>
+            <option value="url-scan">URL Scan</option>
+            <option value="project-scan">Project Scan</option>
+          </select>
+        </div>
+
         {history.length === 0 ? (
           <div className="hist-empty">
             <div style={{ fontSize: 24, opacity: 0.3, marginBottom: 6 }}>🕐</div>
@@ -62,7 +94,7 @@ export const HistoryPanel: React.FC = () => {
           </div>
         ) : (
           <div className="hist-list">
-            {history.map((entry) => {
+            {visibleHistory.map((entry) => {
               const { bySeverity, total } = entry.summary;
               return (
                 <button
@@ -111,7 +143,7 @@ export const HistoryPanel: React.FC = () => {
             textAlign: 'center',
             fontFamily: 'var(--mono)',
           }}>
-            {history.length}/10 mục · Nhấn để khôi phục
+            {visibleHistory.length}/{history.length} mục · Nhấn để khôi phục
           </div>
         )}
       </div>

@@ -1,23 +1,23 @@
 /**
- * Access Control Enhanced Rules
- * OWASP References:
- *   - OTG-AUTHZ-001: Path Traversal / File Include
- *   - OTG-AUTHZ-003: Privilege Escalation (mass assignment)
- *   - OTG-CONFIG-005: Sensitive Endpoint Exposure
- *   - OTG-AUTHN (JWT): JWT token weakness detection
+ * Bộ quy tắc kiểm soát truy cập nâng cao
+ * Tham chiếu OWASP:
+ *   - OTG-AUTHZ-001: Vượt đường dẫn / nhúng tệp
+ *   - OTG-AUTHZ-003: Leo thang đặc quyền (mass assignment)
+ *   - OTG-CONFIG-005: Lộ endpoint nhạy cảm
+ *   - OTG-AUTHN (JWT): Phát hiện điểm yếu JWT
  *
- * Changes from original:
- *   1. runJwtWeakness: Thêm decode header để detect alg:none và weak algo
- *   2. runPathTraversalHeuristic: Mở rộng patterns, thêm Windows paths
- *   3. runSensitiveEndpointExposure: Thêm Git/SVN/backup/Spring actuator subpaths,
- *      detect 403 với gợi ý verb tampering, check HTTP methods từ Allow header
- *   4. runMassAssignmentHeuristic: Fix logic — ưu tiên detect field trong request
+ * Điểm thay đổi so với bản gốc:
+ *   1. runJwtWeakness: Thêm giải mã tiêu đề để phát hiện alg:none và thuật toán yếu
+ *   2. runPathTraversalHeuristic: Mở rộng mẫu nhận diện, thêm đường dẫn Windows
+ *   3. runSensitiveEndpointExposure: Thêm đường dẫn con Git/SVN/backup/Spring actuator,
+ *      phát hiện 403 kèm gợi ý giả mạo phương thức, kiểm tra phương thức HTTP từ Allow header
+ *   4. runMassAssignmentHeuristic: Sửa logic, ưu tiên phát hiện trường trong phần thân yêu cầu
  */
 
 const { normalizeFinding } = require('../../models/finding');
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1. JWT Weakness (enhanced)
+// 1. Điểm yếu JWT (nâng cao)
 // ─────────────────────────────────────────────────────────────────────────────
 
 function decodeJwtHeader(token) {
@@ -36,13 +36,13 @@ function runJwtWeakness(context) {
   const authHeader = context.requestHeaders?.['Authorization'] || '';
   const tokenMatch = authHeader.match(/Bearer\s+(eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*)/i);
 
-  // ── Case A: Decode token đang được dùng ─────────────────────────────────────
+  // ── Trường hợp A: Giải mã token đang được sử dụng ────────────────────────────
   if (tokenMatch) {
     const token = tokenMatch[1];
     const header = decodeJwtHeader(token);
 
     if (header) {
-      // alg:none is critical
+      // alg:none là mức nghiêm trọng cao
       if (!header.alg || header.alg.toLowerCase() === 'none') {
         findings.push(normalizeFinding({
           ruleId: 'A01-JWT-002',
@@ -64,7 +64,7 @@ function runJwtWeakness(context) {
         }));
       }
 
-      // Weak symmetric algorithm
+      // Thuật toán đối xứng yếu
       if (['HS256', 'HS384', 'HS512'].includes(header.alg)) {
         findings.push(normalizeFinding({
           ruleId: 'A01-JWT-003',
@@ -89,7 +89,7 @@ function runJwtWeakness(context) {
     }
   }
 
-  // ── Case B: JWT xuất hiện trong response body (passive heuristic) ───────────
+  // ── Trường hợp B: JWT xuất hiện trong thân phản hồi (quy tắc thụ động) ───────
   const jwtInBody = /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/i.test(text);
   const hasJwtAuth = /^Bearer\s+eyJ/i.test(authHeader);
 
@@ -114,10 +114,10 @@ function runJwtWeakness(context) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2. Path Traversal (enhanced)
+// 2. Vượt đường dẫn (nâng cao)
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Evidence of successful traversal in response
+// Dấu hiệu vượt đường dẫn thành công trong phản hồi
 const TRAVERSAL_SUCCESS_PATTERNS = [
   { pattern: /root:x:0:0:/, label: '/etc/passwd content (root entry)' },
   { pattern: /daemon:x:\d+:\d+/, label: '/etc/passwd content (daemon entry)' },
@@ -127,11 +127,11 @@ const TRAVERSAL_SUCCESS_PATTERNS = [
   { pattern: /\[fonts\]/i, label: 'Windows win.ini [fonts] section' },
   { pattern: /shadow:[*!]/, label: '/etc/shadow content' },
   { pattern: /\[drivers\]/i, label: 'Windows system file content' },
-  // Windows hosts file
+  // Tệp hosts của Windows
   { pattern: /127\.0\.0\.1\s+localhost/i, label: 'hosts file content' },
-  // Source code disclosure via traversal
+  // Lộ mã nguồn qua traversal
   { pattern: /<\?php\s+/i, label: 'PHP source code in response (possible traversal to .php file)' },
-  // Sensitive Windows paths
+  // Đường dẫn Windows nhạy cảm
   { pattern: /\[AutoRun\]/i, label: 'Windows autorun.inf content' },
 ];
 
@@ -166,11 +166,11 @@ function runPathTraversalHeuristic(context) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3. Sensitive Endpoint Exposure (enhanced)
+// 3. Lộ endpoint nhạy cảm (nâng cao)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SENSITIVE_ENDPOINTS = {
-  // Admin / management
+  // Quản trị / vận hành
   '/admin': { severity: 'high', title: 'Bảng quản trị' },
   '/admin/': { severity: 'high', title: 'Bảng quản trị' },
   '/administrator': { severity: 'high', title: 'Bảng quản trị (administrator)' },
@@ -178,7 +178,7 @@ const SENSITIVE_ENDPOINTS = {
   '/manager': { severity: 'high', title: 'Manager interface' },
   '/management': { severity: 'medium', title: 'Management endpoint' },
 
-  // API documentation
+  // Tài liệu API
   '/swagger': { severity: 'medium', title: 'Tài liệu Swagger/OpenAPI' },
   '/swagger-ui': { severity: 'medium', title: 'Swagger UI' },
   '/swagger-ui.html': { severity: 'medium', title: 'Swagger UI HTML' },
@@ -190,7 +190,7 @@ const SENSITIVE_ENDPOINTS = {
   '/v2/api-docs': { severity: 'medium', title: 'Swagger v2 API docs' },
   '/v3/api-docs': { severity: 'medium', title: 'Swagger v3 API docs' },
 
-  // Debug / development
+  // Gỡ lỗi / môi trường phát triển
   '/debug': { severity: 'high', title: 'Endpoint debug' },
   '/trace': { severity: 'medium', title: 'HTTP TRACE / trace endpoint' },
   '/phpinfo.php': { severity: 'high', title: 'Trang PHPInfo' },
@@ -211,14 +211,14 @@ const SENSITIVE_ENDPOINTS = {
   '/actuator/threaddump': { severity: 'medium', title: 'Spring Actuator — thread dump' },
   '/jolokia': { severity: 'high', title: 'Jolokia JMX bridge' },
 
-  // Monitoring
+  // Giám sát
   '/metrics': { severity: 'medium', title: 'Endpoint metrics' },
   '/health': { severity: 'low', title: 'Health check (thông tin hệ thống)' },
   '/status': { severity: 'low', title: 'Status endpoint' },
   '/server-status': { severity: 'medium', title: 'Apache server status' },
   '/server-info': { severity: 'medium', title: 'Apache server info' },
 
-  // Config / secrets
+  // Cấu hình / bí mật
   '/.env': { severity: 'critical', title: 'Tệp biến môi trường' },
   '/.env.local': { severity: 'critical', title: 'Tệp .env.local' },
   '/.env.production': { severity: 'critical', title: 'Tệp .env.production' },
@@ -229,7 +229,7 @@ const SENSITIVE_ENDPOINTS = {
   '/web.config': { severity: 'high', title: 'ASP.NET web.config' },
   '/app.yaml': { severity: 'high', title: 'App config YAML' },
 
-  // Source control exposure
+  // Lộ hệ thống quản lý mã nguồn
   '/.git': { severity: 'critical', title: 'Git repository directory' },
   '/.git/config': { severity: 'critical', title: 'Git config (remote URL, credentials)' },
   '/.git/HEAD': { severity: 'high', title: 'Git HEAD file' },
@@ -239,7 +239,7 @@ const SENSITIVE_ENDPOINTS = {
   '/.hg': { severity: 'high', title: 'Mercurial repository' },
   '/Makefile': { severity: 'medium', title: 'Makefile (project structure)' },
 
-  // Backup files
+  // Tệp sao lưu
   '/backup': { severity: 'high', title: 'Backup directory' },
   '/backup.zip': { severity: 'critical', title: 'Backup archive' },
   '/backup.tar.gz': { severity: 'critical', title: 'Backup archive' },
@@ -247,12 +247,12 @@ const SENSITIVE_ENDPOINTS = {
   '/database.sql': { severity: 'critical', title: 'Database SQL dump' },
   '/dump.sql': { severity: 'critical', title: 'Database dump' },
 
-  // Database admin tools
+  // Công cụ quản trị cơ sở dữ liệu
   '/phpmyadmin': { severity: 'high', title: 'phpMyAdmin' },
   '/phpMyAdmin': { severity: 'high', title: 'phpMyAdmin' },
   '/pma': { severity: 'high', title: 'phpMyAdmin (pma)' },
 
-  // CMS default paths
+  // Đường dẫn mặc định của CMS
   '/wp-admin': { severity: 'medium', title: 'WordPress admin' },
   '/wp-admin/': { severity: 'medium', title: 'WordPress admin' },
   '/wp-login.php': { severity: 'medium', title: 'WordPress login' },
@@ -267,7 +267,7 @@ function runSensitiveEndpointExposure(context) {
     const info = surfaceStatus[path];
     if (!info || !info.status) continue;
 
-    // ── 200 OK and no auth redirect ──────────────────────────────────────────
+    // ── 200 OK và không chuyển hướng tới trang đăng nhập ─────────────────────
     if (info.status === 200 && !info.redirectedToLogin) {
       findings.push(normalizeFinding({
         ruleId: 'A01-EXPOSED-001',
@@ -285,7 +285,7 @@ function runSensitiveEndpointExposure(context) {
       }));
     }
 
-    // ── 403 Forbidden — resource exists, may be bypassable ───────────────────
+    // ── 403 Forbidden: tài nguyên tồn tại, có thể bị vượt qua ─────────────────
     if (info.status === 403) {
       findings.push(normalizeFinding({
         ruleId: 'A01-EXPOSED-002',
@@ -310,7 +310,7 @@ function runSensitiveEndpointExposure(context) {
     }
   }
 
-  // ── Check HTTP methods from Allow header ────────────────────────────────────
+  // ── Kiểm tra phương thức HTTP từ Allow header ───────────────────────────────
   const allowHeader =
     (context.responseHeaders?.['allow'] || context.responseHeaders?.['Allow'] || '').toUpperCase();
   if (allowHeader) {
@@ -343,7 +343,7 @@ function runSensitiveEndpointExposure(context) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. Mass Assignment (fixed logic)
+// 4. Mass Assignment (đã sửa logic)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SENSITIVE_FIELDS_PATTERN =
@@ -358,8 +358,8 @@ function runMassAssignmentHeuristic(context) {
   const inResponse = SENSITIVE_FIELDS_PATTERN.test(responseText);
   const inRequest = SENSITIVE_FIELDS_PATTERN.test(requestBody);
 
-  // ── Case A: Field sent in request AND reflected/confirmed in response ────────
-  // Higher confidence — server likely bound the field
+  // ── Trường hợp A: Trường gửi trong yêu cầu VÀ được phản chiếu/xác nhận trong phản hồi
+  // Độ tin cậy cao hơn: máy chủ có khả năng đã ánh xạ trường này
   if (inRequest && inResponse && ['POST', 'PUT', 'PATCH'].includes(method)) {
     findings.push(normalizeFinding({
       ruleId: 'A01-MASS-002',
@@ -386,7 +386,7 @@ function runMassAssignmentHeuristic(context) {
     return findings;
   }
 
-  // ── Case B: Field sent in request only (moderate concern) ──────────────────
+  // ── Trường hợp B: Chỉ thấy trường trong yêu cầu (mức quan ngại trung bình)
   if (inRequest && ['POST', 'PUT', 'PATCH'].includes(method)) {
     findings.push(normalizeFinding({
       ruleId: 'A01-MASS-003',
@@ -409,7 +409,7 @@ function runMassAssignmentHeuristic(context) {
     return findings;
   }
 
-  // ── Case C: Field chỉ trong response (low confidence, thông tin) ─────────────
+  // ── Trường hợp C: Chỉ thấy trường trong phản hồi (độ tin cậy thấp, mang tính thông tin)
   if (inResponse && !inRequest) {
     findings.push(normalizeFinding({
       ruleId: 'A01-MASS-001',

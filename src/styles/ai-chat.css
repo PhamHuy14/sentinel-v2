@@ -690,25 +690,6 @@
   opacity: 0 !important;
 }
 
-/* ── Static prefix "Hỏi về bảo mật..." ──────────────────────── */
-.ai-input-prefix {
-  position: absolute;
-  left: 14px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 12px;
-  color: var(--text-3);
-  pointer-events: none;
-  z-index: 1;
-  opacity: 0.4;
-  transition: opacity 0.15s;
-}
-
-/* Hide prefix when input focused */
-.ai-input-wrapper:focus-within .ai-input-prefix {
-  opacity: 0 !important;
-}
-
 /* ── Layout: đảm bảo ai-panel không bị overflow ─────────────── */
 .ai-panel {
   display: flex;

@@ -388,6 +388,12 @@ async function runUrlScan(inputUrl, options = {}) {
   });
 
   const fingerprint = extractServerFingerprint(headers);
+  const probeResults = Object.entries(surfaceStatus).map(([route, info]) => ({
+    url: `${parsed.origin}${route}`,
+    status: info.status,
+    contentType: info.contentType || '',
+    bodySnippet: '',
+  }));
 
   // ── Tech Stack + Attack Surface + CSP ────────────────────────
   const techStack     = detectTechStack(text, headers);
@@ -410,6 +416,7 @@ async function runUrlScan(inputUrl, options = {}) {
     setCookies, cookieFlags, contentType: headers.get('content-type') || '',
     forms: allForms, links: [...allLinks],
     authHints, allowMethods: optionsProbe.allow, missingPathProbe,
+    probeResults,
     surfaceStatus, authSummary: summarizeAuth(auth), fingerprint,
     techStack, cspAnalysis, attackSurface,
   };

@@ -1,13 +1,13 @@
 /**
- * Authentication Bypass Heuristic
- * OWASP Reference: OTG-AUTHN-004
- * Detects attempts to bypass authentication via parameter/cookie manipulation,
- * direct page requests, and forced browsing past login gates.
+ * Quy tắc kinh nghiệm phát hiện vượt qua cơ chế xác thực
+ * Tham chiếu OWASP: OTG-AUTHN-004
+ * Phát hiện nỗ lực bypass xác thực qua thao túng tham số/cookie,
+ * truy cập trực tiếp trang và forced browsing vượt qua cổng đăng nhập.
  */
 
 const { normalizeFinding } = require('../../models/finding');
 
-// URL/query patterns that try to skip auth
+// Mẫu URL/tham số truy vấn cố gắng bỏ qua xác thực
 const AUTH_BYPASS_QUERY_PATTERNS = [
   { pattern: /[?&](authenticated|isAuthenticated|auth)=(true|yes|1)/i, label: 'authenticated=true in URL' },
   { pattern: /[?&](skip_auth|skipAuth|bypass|no_auth)=(true|1|yes)/i, label: 'skip_auth flag in URL' },
@@ -16,16 +16,16 @@ const AUTH_BYPASS_QUERY_PATTERNS = [
   { pattern: /[?&](access|grant)=(all|full|admin|true)/i, label: 'access grant param in URL' },
 ];
 
-// Request body patterns for auth bypass
+// Mẫu trong phần thân yêu cầu cho hành vi vượt qua xác thực
 const AUTH_BYPASS_BODY_PATTERNS = [
   { pattern: /["'](authenticated|isAuthenticated)["']\s*:\s*(true|1|"true")/i, label: 'authenticated flag in request body' },
   { pattern: /["'](bypass_auth|skipLogin|skip_login)["']\s*:\s*(true|1|"true")/i, label: 'bypass flag in request body' },
   { pattern: /["']password["']\s*:\s*["']\s*["']/i, label: 'empty password in request body' },
-  // Classic SQL injection auth bypass in input
+  // Mẫu vượt qua xác thực bằng SQL injection kinh điển trong đầu vào
   { pattern: /["']username["']\s*:.+['"].*or.*['"].*=.*['"]/i, label: 'possible SQL injection in username field' },
 ];
 
-// Cookie patterns that hint at tampering
+// Mẫu cookie cho thấy khả năng bị thao túng
 const AUTH_BYPASS_COOKIE_PATTERNS = [
   { pattern: /authenticated=(true|1|yes)/i, label: 'authenticated=true cookie' },
   { pattern: /is_admin=(true|1|yes)/i, label: 'is_admin cookie' },
@@ -34,14 +34,14 @@ const AUTH_BYPASS_COOKIE_PATTERNS = [
   { pattern: /logged_in=(true|1)/i, label: 'logged_in cookie' },
 ];
 
-// Response signals that auth was bypassed successfully
+// Dấu hiệu trong phản hồi cho thấy vượt qua xác thực thành công
 const AUTH_BYPASS_SUCCESS_SIGNALS = [
   /welcome\s+(admin|administrator|root)/i,
   /"authenticated"\s*:\s*true/i,
   /"loggedIn"\s*:\s*true/i,
   /"isAdmin"\s*:\s*true/i,
   /dashboard|control.panel|admin.panel/i,
-  // SQL injection success artifacts in response
+  // Dấu vết SQL injection thành công trong phản hồi
   /syntax error|sql error|mysql error|ora-\d{5}/i,
 ];
 
@@ -54,7 +54,7 @@ function runAuthBypassHeuristic(context) {
   const statusCode = context.statusCode || 0;
 
   // ----------------------------------------------------------------
-  // 1. URL query bypass attempts
+  // 1. Nỗ lực bypass qua URL query
   // ----------------------------------------------------------------
   const queryBypassMatches = [];
   for (const { pattern, label } of AUTH_BYPASS_QUERY_PATTERNS) {
@@ -64,7 +64,7 @@ function runAuthBypassHeuristic(context) {
   }
 
   // ----------------------------------------------------------------
-  // 2. Request body bypass attempts
+  // 2. Nỗ lực vượt qua xác thực qua phần thân yêu cầu
   // ----------------------------------------------------------------
   const bodyBypassMatches = [];
   for (const { pattern, label } of AUTH_BYPASS_BODY_PATTERNS) {
@@ -74,7 +74,7 @@ function runAuthBypassHeuristic(context) {
   }
 
   // ----------------------------------------------------------------
-  // 3. Cookie manipulation
+  // 3. Thao túng cookie
   // ----------------------------------------------------------------
   const cookieBypassMatches = [];
   for (const { pattern, label } of AUTH_BYPASS_COOKIE_PATTERNS) {
@@ -84,7 +84,7 @@ function runAuthBypassHeuristic(context) {
   }
 
   // ----------------------------------------------------------------
-  // 4. Response signals
+  // 4. Dấu hiệu từ phản hồi
   // ----------------------------------------------------------------
   const successSignals = AUTH_BYPASS_SUCCESS_SIGNALS.filter(p => p.test(responseText));
 
@@ -93,7 +93,7 @@ function runAuthBypassHeuristic(context) {
     bodyBypassMatches.length > 0 ||
     cookieBypassMatches.length > 0;
 
-  // Case A: Bypass attempt + success signal (200 response with auth content)
+  // Trường hợp A: Có nỗ lực vượt qua + dấu hiệu thành công (200 kèm nội dung đã xác thực)
   if (hasAnyBypassAttempt && successSignals.length > 0 && statusCode === 200) {
     const allEvidence = [
       ...queryBypassMatches.map(l => `URL: ${l}`),
@@ -121,10 +121,10 @@ function runAuthBypassHeuristic(context) {
       ],
       collector: 'blackbox',
     }));
-    return findings; // Đã có critical finding, không cần thêm
+    return findings; // Đã có finding mức critical, không cần thêm
   }
 
-  // Case B: Bypass attempt không confirm được (low-medium)
+  // Trường hợp B: Có nỗ lực bypass nhưng chưa xác nhận được (low-medium)
   if (queryBypassMatches.length > 0) {
     findings.push(normalizeFinding({
       ruleId: 'A01-AUTHBYP-002',

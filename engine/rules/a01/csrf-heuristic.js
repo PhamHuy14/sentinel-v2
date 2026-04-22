@@ -1,11 +1,11 @@
 /**
- * CSRF Heuristic
- * OWASP Reference: OTG-SESS-005
+ * Quy tắc kinh nghiệm CSRF
+ * Tham chiếu OWASP: OTG-SESS-005
  *
- * Changes from original:
- *   1. Thêm CORS misconfiguration → CSRF vector (Access-Control-Allow-Origin + Credentials)
- *   2. Thêm JSON POST without custom header check
- *   3. Thêm Origin/Referer validation check hint
+ * Điểm thay đổi so với bản gốc:
+ *   1. Thêm cấu hình CORS sai -> vector CSRF (Access-Control-Allow-Origin + Credentials)
+ *   2. Thêm kiểm tra JSON POST không có tiêu đề tùy chỉnh
+ *   3. Thêm gợi ý kiểm tra xác thực Origin/Referer
  */
 
 const { normalizeFinding } = require('../../models/finding');
@@ -19,14 +19,14 @@ function runCsrfHeuristic(context) {
   const contentType = (context.contentType || '').toLowerCase();
   const method = (context.method || 'GET').toUpperCase();
 
-  // ── Normalise response header names ─────────────────────────────────────────
+  // ── Chuẩn hóa tên tiêu đề phản hồi ──────────────────────────────────────────
   const h = {};
   for (const [k, v] of Object.entries(responseHeaders)) {
     h[k.toLowerCase()] = v;
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // 1. Form-based CSRF (original logic, kept)
+  // 1. CSRF qua form (giữ logic gốc)
   // ─────────────────────────────────────────────────────────────────────────────
   const postForms = detectPostForms(forms);
 
@@ -40,7 +40,6 @@ function runCsrfHeuristic(context) {
       findings.push(normalizeFinding({
         ruleId: 'A01-CSRF-001',
         owaspCategory: 'A01',
-        title: 'Form POST có thể thiếu anti-CSRF token',
         severity: context.isLocalhost ? 'low' : 'medium',
         confidence: 'low',
         target: context.finalUrl,
@@ -57,7 +56,7 @@ function runCsrfHeuristic(context) {
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // 2. CORS misconfiguration → CSRF vector (NEW)
+  // 2. CORS misconfiguration -> vector CSRF (mới)
   // ─────────────────────────────────────────────────────────────────────────────
   const acao = h['access-control-allow-origin'] || '';
   const acac = h['access-control-allow-credentials'] || '';
@@ -88,7 +87,7 @@ function runCsrfHeuristic(context) {
     }));
   }
 
-  // Echo-back origin with credentials
+  // Echo Origin kèm credentials
   const requestOrigin = requestHeaders['Origin'] || requestHeaders['origin'] || '';
   if (requestOrigin && acao === requestOrigin && acac.toLowerCase() === 'true') {
     findings.push(normalizeFinding({
@@ -116,7 +115,7 @@ function runCsrfHeuristic(context) {
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // 3. JSON POST API without custom header protection (NEW)
+  // 3. API JSON POST không có lớp bảo vệ bằng tiêu đề tùy chỉnh (mới)
   // ─────────────────────────────────────────────────────────────────────────────
   if (method === 'POST' && contentType.includes('application/json')) {
     const hasCustomHeader =
@@ -160,15 +159,15 @@ function runCsrfHeuristic(context) {
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // 4. Referer/Origin validation hint (NEW)
+  // 4. Gợi ý kiểm tra Referer/Origin (mới)
   // ─────────────────────────────────────────────────────────────────────────────
-  // If no Referer in request to a state-changing endpoint, note it
+  // Nếu request tới endpoint thay đổi trạng thái mà không có Referer thì ghi nhận
   if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
     const referer = requestHeaders['Referer'] || requestHeaders['referer'] || '';
     const origin = requestHeaders['Origin'] || requestHeaders['origin'] || '';
 
     if (!referer && !origin) {
-      // Only flag if there's also no CSRF token visible
+      // Chỉ cảnh báo nếu đồng thời không thấy CSRF token
       const hasToken = hasCsrfToken(context.text || '');
       if (!hasToken) {
         findings.push(normalizeFinding({

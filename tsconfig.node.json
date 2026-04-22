@@ -9,12 +9,11 @@
     "skipLibCheck": true,
 
     "outDir": "./dist-ts",
-    "baseUrl": ".",
     "composite": true,
     "allowJs": true,
     "resolveJsonModule": true,
     "paths": {
-      "@engine/*": ["engine/*"]
+      "@engine/*": ["./engine/*"]
     }
   },
   "include": ["electron", "engine"]

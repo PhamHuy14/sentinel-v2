@@ -21,6 +21,9 @@ export const ProjectScanForm: React.FC = () => {
     <>
       <div className="section">
         <div className="section-label">Thư mục dự án</div>
+        <div className="quick-help-box">
+          Mẹo cho người mới: hãy quét thư mục source chính trước, sau đó quét lại toàn bộ dự án nếu cần.
+        </div>
         <div className="field">
           <label className="field-label">Thư mục mã nguồn</label>
           <div style={{ display: 'flex', gap: 10, width: '100%' }}>

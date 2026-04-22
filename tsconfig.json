@@ -11,12 +11,11 @@
     "resolveJsonModule": true,
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
-    "ignoreDeprecations": "6.0",
+    "ignoreDeprecations": "5.0",
 
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"],
-      "@engine/*": ["engine/*"]
+      "@/*": ["./src/*"],
+      "@engine/*": ["./engine/*"]
     }
   },
   "include": ["src"],

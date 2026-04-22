@@ -1,68 +1,79 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useAIStore } from '../store/useAIStore';
 import { useStore } from '../store/useStore';
 import { Finding } from '../types';
 import { ReportExportButton } from './ReportExportButton';
 import { RiskDashboard } from './RiskDashboard';
-import { useAIStore } from '../store/useAIStore';
 
-const sevClass  = (s: string) => `sev-${s}`;
-const tagClass  = (s: string) => `tag-${s}`;
-const confClass = (c: string) => c === 'high' ? 'conf-high' : c === 'medium' ? 'conf-medium' : 'conf-low';
 const httpColor = (code: number) => code >= 500 ? 'err' : code >= 400 ? 'warn' : code >= 300 ? 'warn' : 'ok';
+const confClass = (c: string) => c === 'high' ? 'conf-high' : c === 'medium' ? 'conf-medium' : 'conf-low';
 
 const SEV_ORDER: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
 const CONF_ORDER: Record<string, number> = { high: 3, medium: 2, low: 1 };
+type FindingStatus = 'new' | 'triaged' | 'in-progress' | 'mitigated';
 
-const FindingCard: React.FC<{ f: Finding }> = ({ f }) => {
-  const [open, setOpen] = useState(false);
+const findingKey = (f: Finding): string => `${f.ruleId}::${f.target || f.location}::${f.title}`;
+
+const statusLabel = (s: FindingStatus) => {
+  if (s === 'new') return 'New';
+  if (s === 'triaged') return 'Triaged';
+  if (s === 'in-progress') return 'In Progress';
+  return 'Mitigated';
+};
+
+const SeverityCell: React.FC<{ sev: Finding['severity'] }> = ({ sev }) => (
+  <span className={`sev-tag tag-${sev}`}>{sev}</span>
+);
+
+const CollectorLabel: React.FC<{ collector: Finding['collector'] }> = ({ collector }) => {
+  if (collector === 'active-fuzzer') return <span className="table-pill">Fuzzer</span>;
+  if (collector === 'blackbox') return <span className="table-pill">Black-box</span>;
+  return <span className="table-pill">Source</span>;
+};
+
+const FindingDrawer: React.FC<{
+  finding: Finding | null;
+  onClose: () => void;
+}> = ({ finding, onClose }) => {
   const { setAIPendingFinding, setAIChatOpen } = useAIStore();
-  const isFuzzer   = f.collector === 'active-fuzzer';
-  const payloadLine= f.evidence.find((e) => e.startsWith('Payload:'));
-  const evidenceLines = f.evidence.filter((e) => !e.startsWith('Payload:'));
+
+  if (!finding) return null;
+
+  const isFuzzer = finding.collector === 'active-fuzzer';
+  const payloadLine = finding.evidence.find((e) => e.startsWith('Payload:'));
+  const evidenceLines = finding.evidence.filter((e) => !e.startsWith('Payload:'));
 
   const handleAskAI = (e: React.MouseEvent) => {
-    e.stopPropagation(); // không trigger expand
-    setAIPendingFinding(f);
+    e.stopPropagation();
+    setAIPendingFinding(finding);
     setAIChatOpen(true);
   };
 
   return (
-    <div className={`finding-card ${sevClass(f.severity)}`}>
-      <div className={`finding-header ${open ? 'open' : ''}`} onClick={() => setOpen((o) => !o)}>
-        <span className={`sev-tag ${tagClass(f.severity)}`}>{f.severity}</span>
-        <span className="finding-title">{f.title}</span>
-        <div className="finding-badges">
-          <span className="badge badge-cat">{f.owaspCategory}</span>
-          {isFuzzer && <span className="badge badge-fuzzer">fuzzer</span>}
+    <div className="finding-drawer-backdrop" onClick={onClose}>
+      <aside className="finding-drawer" onClick={(e) => e.stopPropagation()}>
+        <div className="finding-drawer-head">
+          <div className="finding-drawer-title-wrap">
+            <span className={`sev-tag tag-${finding.severity}`}>{finding.severity}</span>
+            <div className="finding-drawer-title">{finding.title}</div>
+          </div>
+          <button className="btn-secondary finding-drawer-close" onClick={onClose}>Đóng</button>
         </div>
-        <button
-          className="btn-ask-ai"
-          onClick={handleAskAI}
-          title="Phân tích finding này với AI"
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-          </svg>
-          Hỏi AI
-        </button>
-        <span className={`expand-caret ${open ? 'open' : ''}`}>▶</span>
-      </div>
 
-      {open && (
+        <div className="finding-drawer-meta">
+          <span className="badge badge-cat">{finding.owaspCategory}</span>
+          {isFuzzer && <span className="badge badge-fuzzer">fuzzer</span>}
+          <span className={`conf-badge ${confClass(finding.confidence)}`}>confidence: {finding.confidence}</span>
+        </div>
+
         <div className="finding-detail">
-          <div style={{ display: 'flex', gap: 12 }}>
-            <div style={{ flex: 1 }}>
-              <div className="detail-label">Vị trí</div>
-              <div className="detail-mono">{f.target || f.location}</div>
-            </div>
-            <div>
-              <div className="detail-label">Độ tin cậy</div>
-              <span className={`conf-badge ${confClass(f.confidence)}`}>{f.confidence}</span>
-            </div>
+          <div>
+            <div className="detail-label">Vị trí</div>
+            <div className="detail-mono">{finding.target || finding.location}</div>
           </div>
           <div>
             <div className="detail-label">Mã rule</div>
-            <div className="detail-mono" style={{ color: 'var(--text-3)', fontSize: 11 }}>{f.ruleId}</div>
+            <div className="detail-mono" style={{ color: 'var(--text-3)', fontSize: 11 }}>{finding.ruleId}</div>
           </div>
           {isFuzzer && payloadLine && (
             <div>
@@ -78,78 +89,186 @@ const FindingCard: React.FC<{ f: Finding }> = ({ f }) => {
           )}
           <div>
             <div className="detail-label">Khuyến nghị khắc phục</div>
-            <div className="detail-fix">{f.remediation}</div>
+            <div className="detail-fix">{finding.remediation}</div>
           </div>
+
           <div style={{ paddingTop: 4 }}>
             <button className="btn-ask-ai btn-ask-ai--detail" onClick={handleAskAI}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>
               </svg>
-              Phân tích chi tiết &amp; hướng dẫn khắc phục
+              Phân tích chi tiết bằng AI
             </button>
           </div>
         </div>
-      )}
+      </aside>
+    </div>
+  );
+};
+
+const FindingsTable: React.FC<{
+  findings: Finding[];
+  scopeKey: string;
+  onOpen: (f: Finding) => void;
+  getStatus: (scopeKey: string, findingKey: string) => FindingStatus | undefined;
+  onStatusChange: (scopeKey: string, f: Finding, status: FindingStatus) => void;
+}> = ({ findings, scopeKey, onOpen, getStatus, onStatusChange }) => {
+  return (
+    <div className="findings-table-wrap">
+      <table className="findings-table">
+        <thead>
+          <tr>
+            <th>Severity</th>
+            <th>Rule</th>
+            <th>Category</th>
+            <th>Target</th>
+            <th>Collector</th>
+            <th>Confidence</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {findings.map((f, idx) => {
+            const key = findingKey(f);
+            const rowStatus = getStatus(scopeKey, key) || 'new';
+            return (
+              <tr key={`${key}-${idx}`} className="finding-row">
+                <td><SeverityCell sev={f.severity} /></td>
+                <td>
+                  <div className="finding-rule">{f.ruleId}</div>
+                  <div className="finding-title-table">{f.title}</div>
+                </td>
+                <td><span className="badge badge-cat">{f.owaspCategory}</span></td>
+                <td className="finding-target" title={f.target || f.location}>{f.target || f.location || '—'}</td>
+                <td><CollectorLabel collector={f.collector} /></td>
+                <td><span className={`conf-badge ${confClass(f.confidence)}`}>{f.confidence}</span></td>
+                <td>
+                  <select
+                    className={`finding-status-select status-${rowStatus}`}
+                    value={rowStatus}
+                    onChange={(e) => onStatusChange(scopeKey, f, e.target.value as FindingStatus)}
+                    title="Trạng thái xử lý finding"
+                  >
+                    <option value="new">{statusLabel('new')}</option>
+                    <option value="triaged">{statusLabel('triaged')}</option>
+                    <option value="in-progress">{statusLabel('in-progress')}</option>
+                    <option value="mitigated">{statusLabel('mitigated')}</option>
+                  </select>
+                </td>
+                <td>
+                  <button className="btn-secondary btn-open-finding" onClick={() => onOpen(f)}>Chi tiết</button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 };
 
 export const ResultsPanel: React.FC = () => {
-  const { urlScanResult, projectScanResult, error, isLoading, activeTab, resetUrlScanResult, resetProjectScanResult } = useStore();
+  const {
+    urlScanResult,
+    projectScanResult,
+    error,
+    isLoading,
+    activeTab,
+    resetUrlScanResult,
+    resetProjectScanResult,
+    setFindingStatus,
+    getFindingStatus,
+    clearFindingStatuses,
+    resultsDensity,
+    setResultsDensity,
+  } = useStore();
 
-  // Trạng thái lọc / sắp xếp nâng cao
-  const [sortBy,      setSortBy]      = useState<'severity' | 'confidence' | 'collector'>('severity');
-  const [filterSev,   setFilterSev]   = useState('all');
-  const [filterCol,   setFilterCol]   = useState('all');
-  const [searchQ,     setSearchQ]     = useState('');
-  const [catFilter,   setCatFilter]   = useState('all');
+  const [sortBy, setSortBy] = useState<'severity' | 'confidence' | 'collector'>('severity');
+  const [filterSev, setFilterSev] = useState('all');
+  const [filterCol, setFilterCol] = useState('all');
+  const [searchQ, setSearchQ] = useState('');
+  const [catFilter, setCatFilter] = useState('all');
+  const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
+  const [showOverview, setShowOverview] = useState(true);
 
-  if (isLoading) return null;
-  if (error)     return <div className="error-bar">{error}</div>;
+  const onStatusChange = (scopeKey: string, finding: Finding, statusValue: FindingStatus) => {
+    setFindingStatus(scopeKey, findingKey(finding), statusValue);
+  };
 
   const scanResult = activeTab === 'url' ? urlScanResult : projectScanResult;
+
+  useEffect(() => {
+    if (!scanResult) return;
+    // Với scan nhiều findings, mặc định thu gọn overview để ưu tiên vùng hiển thị lỗi.
+    setShowOverview(scanResult.findings.length <= 3);
+  }, [scanResult?.mode, scanResult?.target, scanResult?.scannedUrl, scanResult?.findings.length]);
+
+  if (isLoading) return null;
+  if (error) return <div className="error-bar">{error}</div>;
 
   if (!scanResult) {
     return (
       <div className="empty-state">
         <div className="empty-icon">◎</div>
-        <p>Vui lòng chọn mục tiêu và nhấn &quot;Bắt đầu quét&quot; để khởi động chế độ <b>{activeTab === 'url' ? 'Quét URL' : 'Quét dự án'}</b>.</p>
+        <p>Bắt đầu bằng cách chọn mục tiêu ở cột trái rồi nhấn <b>{activeTab === 'url' ? 'Bắt đầu quét' : 'Quét dự án'}</b>.</p>
+        <p className="empty-state-tip">Nếu bạn mới làm quen bảo mật, hãy chạy profile mặc định trước để có kết quả dễ đọc và dễ xử lý.</p>
       </div>
     );
   }
 
   const { findings, metadata, scannedUrl, finalUrl, status, title } = scanResult;
+  const scanScopeKey = `${scanResult.mode}::${scanResult.target || scannedUrl || 'unknown'}`.toLowerCase();
   const summary = metadata.summary;
   const cats = Array.from(new Set(findings.map((f) => f.owaspCategory))).sort();
 
-  // Tạo danh sách đã lọc và sắp xếp
   const visible = findings
-    .filter((f) => catFilter   === 'all' || f.owaspCategory === catFilter)
-    .filter((f) => filterSev   === 'all' || f.severity      === filterSev)
-    .filter((f) => filterCol   === 'all' || f.collector     === filterCol)
-    .filter((f) => !searchQ    || f.title.toLowerCase().includes(searchQ.toLowerCase())
-                               || f.ruleId.toLowerCase().includes(searchQ.toLowerCase()))
+    .filter((f) => catFilter === 'all' || f.owaspCategory === catFilter)
+    .filter((f) => filterSev === 'all' || f.severity === filterSev)
+    .filter((f) => filterCol === 'all' || f.collector === filterCol)
+    .filter((f) => !searchQ || f.title.toLowerCase().includes(searchQ.toLowerCase()) || f.ruleId.toLowerCase().includes(searchQ.toLowerCase()))
     .sort((a, b) => {
-      if (sortBy === 'severity')   return SEV_ORDER[b.severity]   - SEV_ORDER[a.severity];
+      if (sortBy === 'severity') return SEV_ORDER[b.severity] - SEV_ORDER[a.severity];
       if (sortBy === 'confidence') return CONF_ORDER[b.confidence] - CONF_ORDER[a.confidence];
       return a.collector.localeCompare(b.collector);
     });
 
   const cnt = (sev: string) => summary.bySeverity?.[sev] || 0;
-
-  const resetFilters = () => { setSortBy('severity'); setFilterSev('all'); setFilterCol('all'); setSearchQ(''); setCatFilter('all'); };
+  const resetFilters = () => {
+    setSortBy('severity');
+    setFilterSev('all');
+    setFilterCol('all');
+    setSearchQ('');
+    setCatFilter('all');
+  };
   const hasFilter = catFilter !== 'all' || filterSev !== 'all' || filterCol !== 'all' || searchQ !== '';
+  const scopedStatusCount = findings.reduce((acc, f) => {
+    const statusValue = getFindingStatus(scanScopeKey, findingKey(f));
+    return statusValue ? acc + 1 : acc;
+  }, 0);
 
   return (
-    <>
-      {/* Bảng điều khiển rủi ro */}
-      <div style={{ flexShrink: 0 }}>
-        <RiskDashboard scanResult={scanResult} />
+    <div className={`results-shell density-${resultsDensity}`}>
+      <div className="beginner-guide-strip">
+        <div className="beginner-guide-title">Lộ trình xử lý khuyến nghị</div>
+        <div className="beginner-guide-steps">
+          <span>1) Ưu tiên sửa CRITICAL/HIGH</span>
+          <span>2) Chuyển trạng thái để theo dõi tiến độ</span>
+          <span>3) Xác minh lại bằng scan nhanh</span>
+        </div>
+        <button className="btn-secondary btn-overview-toggle" onClick={() => setShowOverview((v) => !v)}>
+          {showOverview ? 'Ẩn tổng quan' : 'Hiện tổng quan'}
+        </button>
       </div>
 
-      {/* Thông tin scan + tổng quan */}
+      {showOverview && (
+        <div style={{ flexShrink: 0 }}>
+          <RiskDashboard scanResult={scanResult} />
+        </div>
+      )}
+
+      {showOverview && (
       <div className="results-info-row">
-        {/* Bên trái: metadata scan */}
         <div className="section results-info-meta">
           <div className="section-label">Thông tin scan</div>
           <div className="meta-table">
@@ -213,54 +332,72 @@ export const ResultsPanel: React.FC = () => {
           </div>
         </div>
 
-        {/* Bên phải: tổng quan và xuất báo cáo */}
         <div className="section results-info-summary">
           <div className="section-label">Tổng quan</div>
           <div className="results-count">{summary.total}</div>
           <div className="results-title">Tổng số findings</div>
           <div className="sev-chips">
             {cnt('critical') > 0 && <span className="sev-chip chip-crit">CRIT {cnt('critical')}</span>}
-            {cnt('high')     > 0 && <span className="sev-chip chip-high">HIGH {cnt('high')}</span>}
-            {cnt('medium')   > 0 && <span className="sev-chip chip-med">MED {cnt('medium')}</span>}
-            {cnt('low')      > 0 && <span className="sev-chip chip-low">LOW {cnt('low')}</span>}
+            {cnt('high') > 0 && <span className="sev-chip chip-high">HIGH {cnt('high')}</span>}
+            {cnt('medium') > 0 && <span className="sev-chip chip-med">MED {cnt('medium')}</span>}
+            {cnt('low') > 0 && <span className="sev-chip chip-low">LOW {cnt('low')}</span>}
           </div>
           <div style={{ marginTop: 'auto', paddingTop: 10 }}>
             <ReportExportButton />
           </div>
         </div>
       </div>
+      )}
 
-      {/* Thanh lọc nâng cao */}
       <div className="filter-bar-adv" style={{ flexShrink: 0 }}>
-        <input
-          type="text" className="search-input" placeholder="🔍 Tìm findings…"
-          value={searchQ} onChange={(e) => setSearchQ(e.target.value)}
-        />
-        <select className="filter-select" value={filterSev} onChange={(e) => setFilterSev(e.target.value)}>
-          <option value="all">Tất cả mức độ</option>
-          <option value="critical">Critical</option>
-          <option value="high">High</option>
-          <option value="medium">Medium</option>
-          <option value="low">Low</option>
-        </select>
-        <select className="filter-select" value={filterCol} onChange={(e) => setFilterCol(e.target.value)}>
-          <option value="all">Tất cả collector</option>
-          <option value="blackbox">Black-box</option>
-          <option value="active-fuzzer">Fuzzer</option>
-          <option value="source">Mã nguồn</option>
-        </select>
-        {cats.length > 1 && (
-          <select className="filter-select" value={catFilter} onChange={(e) => setCatFilter(e.target.value)}>
-            <option value="all">Tất cả danh mục</option>
-            {cats.map((c) => <option key={c} value={c}>{c}</option>)}
+        <div className="filter-bar-main">
+          <input
+            type="text"
+            className="search-input"
+            placeholder="🔍 Tìm findings…"
+            value={searchQ}
+            onChange={(e) => setSearchQ(e.target.value)}
+          />
+          <select className="filter-select filter-select-severity" value={filterSev} onChange={(e) => setFilterSev(e.target.value)}>
+            <option value="all">Mức độ</option>
+            <option value="critical">Critical</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
           </select>
-        )}
-        <select className="filter-select" value={sortBy} onChange={(e) => setSortBy(e.target.value as 'severity' | 'confidence' | 'collector')}>
-          <option value="severity">Sắp xếp: Mức độ</option>
-          <option value="confidence">Sắp xếp: Độ tin cậy</option>
-          <option value="collector">Sắp xếp: Collector</option>
-        </select>
+          <select className="filter-select filter-select-collector" value={filterCol} onChange={(e) => setFilterCol(e.target.value)}>
+            <option value="all">Collector</option>
+            <option value="blackbox">Black-box</option>
+            <option value="active-fuzzer">Fuzzer</option>
+            <option value="source">Mã nguồn</option>
+          </select>
+          {cats.length > 1 && (
+            <select className="filter-select filter-select-category" value={catFilter} onChange={(e) => setCatFilter(e.target.value)}>
+              <option value="all">Danh mục</option>
+              {cats.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          )}
+          <select className="filter-select filter-select-sort" value={sortBy} onChange={(e) => setSortBy(e.target.value as 'severity' | 'confidence' | 'collector')}>
+            <option value="severity">Sort: Mức độ</option>
+            <option value="confidence">Sort: Tin cậy</option>
+            <option value="collector">Sort: Collector</option>
+          </select>
+        </div>
         <div className="filter-bar-right">
+          <div className="density-switch" title="Chuyển mật độ hiển thị findings">
+            <button
+              className={`btn-reset ${resultsDensity === 'comfort' ? 'active' : ''}`}
+              onClick={() => setResultsDensity('comfort')}
+            >
+              Comfort
+            </button>
+            <button
+              className={`btn-reset ${resultsDensity === 'compact' ? 'active' : ''}`}
+              onClick={() => setResultsDensity('compact')}
+            >
+              Compact
+            </button>
+          </div>
           <span className="filter-count">{visible.length}/{findings.length}</span>
           {hasFilter && (
             <button className="btn-reset" onClick={resetFilters} title="Đặt lại toàn bộ bộ lọc">
@@ -268,11 +405,22 @@ export const ResultsPanel: React.FC = () => {
             </button>
           )}
           <button
+            className="btn-reset btn-reset-status"
+            title="Xóa trạng thái xử lý của scan hiện tại"
+            disabled={scopedStatusCount === 0}
+            onClick={() => {
+              clearFindingStatuses(scanScopeKey);
+            }}
+          >
+            ↺ Reset statuses
+          </button>
+          <button
             className="btn-reset btn-clear-results"
             title={`Xóa kết quả ${activeTab === 'url' ? 'quét URL' : 'quét dự án'} và bắt đầu lại`}
             onClick={() => {
               if (activeTab === 'url') resetUrlScanResult();
               else resetProjectScanResult();
+              setSelectedFinding(null);
             }}
           >
             ✕ Xóa
@@ -280,17 +428,22 @@ export const ResultsPanel: React.FC = () => {
         </div>
       </div>
 
-      {/* Danh sách findings */}
       {visible.length === 0 ? (
         <div className="empty-state" style={{ minHeight: 160 }}>
           <div className="empty-icon">✓</div>
           <p>{hasFilter ? 'Không có finding nào khớp với bộ lọc hiện tại.' : 'Không phát hiện vấn đề nào.'}</p>
         </div>
       ) : (
-        <div className="findings-list">
-          {visible.map((f, i) => <FindingCard key={i} f={f} />)}
-        </div>
+        <FindingsTable
+          findings={visible}
+          scopeKey={scanScopeKey}
+          onOpen={setSelectedFinding}
+          getStatus={getFindingStatus}
+          onStatusChange={onStatusChange}
+        />
       )}
-    </>
+
+      <FindingDrawer finding={selectedFinding} onClose={() => setSelectedFinding(null)} />
+    </div>
   );
 };

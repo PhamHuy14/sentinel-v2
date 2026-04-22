@@ -1,22 +1,22 @@
 /**
- * Forced Browsing Heuristic
- * OWASP Reference: OTG-AUTHZ-002
+ * Quy tắc kinh nghiệm Forced Browsing
+ * Tham chiếu OWASP: OTG-AUTHZ-002
  *
- * Changes from original:
- *   1. Removed paths already covered by runSensitiveEndpointExposure (dedup)
- *   2. Added 403 detection with verb-bypass hint
- *   3. Added 401 differentiation
- *   4. Extended path list for auth-protected pages (not just tooling)
- *   5. Added X-Forwarded-For bypass hint
+ * Điểm thay đổi so với bản gốc:
+ *   1. Loại bỏ các đường dẫn đã được runSensitiveEndpointExposure xử lý (tránh trùng)
+ *   2. Thêm phát hiện 403 kèm gợi ý vượt qua bằng giả mạo phương thức
+ *   3. Thêm phân biệt trạng thái 401
+ *   4. Mở rộng danh sách đường dẫn cần xác thực (không chỉ tooling)
+ *   5. Thêm gợi ý bypass bằng X-Forwarded-For
  */
 
 const { normalizeFinding } = require('../../models/finding');
 
-// Paths specific to forced browsing / auth bypass testing.
-// Note: tooling paths (admin, swagger, debug etc.) are handled by
-// runSensitiveEndpointExposure in access-control-enhanced.js — not duplicated here.
+// Các đường dẫn dành riêng cho kiểm thử forced browsing / vượt qua xác thực.
+// Lưu ý: nhóm đường dẫn tooling (admin, swagger, debug...) đã được xử lý bởi
+// runSensitiveEndpointExposure trong access-control-enhanced.js, không lặp lại ở đây.
 const FORCED_BROWSING_PATHS = [
-  // Protected pages that regular users should NOT reach without auth
+  // Trang được bảo vệ mà người dùng thường không được truy cập nếu chưa xác thực
   { path: '/dashboard', title: 'Dashboard', severity: 'medium' },
   { path: '/account', title: 'Trang tài khoản', severity: 'medium' },
   { path: '/profile', title: 'Trang profile', severity: 'medium' },
@@ -30,14 +30,14 @@ const FORCED_BROWSING_PATHS = [
   { path: '/admin/settings', title: 'Admin settings', severity: 'critical' },
   { path: '/admin/logs', title: 'Admin logs', severity: 'high' },
   { path: '/admin/reports', title: 'Admin reports', severity: 'high' },
-  // API protected endpoints
+  // API endpoint cần bảo vệ
   { path: '/api/admin', title: 'Admin API', severity: 'critical' },
   { path: '/api/users', title: 'Users API', severity: 'high' },
   { path: '/api/v1/admin', title: 'Admin API v1', severity: 'critical' },
   { path: '/api/v2/admin', title: 'Admin API v2', severity: 'critical' },
   { path: '/internal', title: 'Internal endpoint', severity: 'high' },
   { path: '/internal/api', title: 'Internal API', severity: 'high' },
-  // Private/restricted areas
+  // Khu vực riêng tư/hạn chế
   { path: '/private', title: 'Khu vực riêng tư', severity: 'medium' },
   { path: '/restricted', title: 'Khu vực hạn chế', severity: 'medium' },
   { path: '/secret', title: 'Endpoint bí mật', severity: 'high' },
@@ -46,7 +46,7 @@ const FORCED_BROWSING_PATHS = [
   { path: '/superadmin', title: 'Super admin endpoint', severity: 'critical' },
 ];
 
-// Headers an attacker might add to bypass IP-based auth gates
+// Header attacker có thể thêm để thử vượt qua cổng xác thực theo IP
 const IP_BYPASS_HINTS = [
   'X-Forwarded-For: 127.0.0.1',
   'X-Real-IP: 127.0.0.1',
@@ -63,7 +63,7 @@ function runForcedBrowsing(context) {
     const info = surfaceStatus[path];
     if (!info || !info.status) continue;
 
-    // ── 200: Directly accessible ───────────────────────────────────────────────
+    // ── 200: Truy cập trực tiếp được ───────────────────────────────────────────
     if (info.status === 200 && !info.redirectedToLogin) {
       findings.push(normalizeFinding({
         ruleId: 'A01-FB-001',
@@ -89,14 +89,14 @@ function runForcedBrowsing(context) {
       continue;
     }
 
-    // ── 302 redirect to login — correct behavior but log it ───────────────────
+    // ── 302 chuyển hướng về login: hành vi đúng, bỏ qua ───────────────────────
     if (info.status === 302 && info.redirectedToLogin) {
-      // This is correct behavior — skip
+      // Hành vi đúng, bỏ qua
       continue;
     }
 
-    // ── 403: Resource exists but access blocked ──────────────────────────────
-    // Could be bypassable via: verb tampering, IP spoofing headers, path variation
+    // ── 403: Tài nguyên tồn tại nhưng bị chặn truy cập ────────────────────────
+    // Có thể bị vượt qua bằng: giả mạo phương thức, giả mạo IP header, biến thể đường dẫn
     if (info.status === 403) {
       findings.push(normalizeFinding({
         ruleId: 'A01-FB-002',
@@ -125,9 +125,9 @@ function runForcedBrowsing(context) {
       }));
     }
 
-    // ── 401: Unauthenticated — correct but may have brute-force risk ──────────
+    // ── 401: Chưa xác thực, đúng về mặt kiểm soát truy cập nhưng có rủi ro brute-force
     if (info.status === 401) {
-      // 401 on admin paths hints at basic auth — worth noting
+      // 401 ở đường dẫn admin/internal có thể gợi ý Basic Auth, cần ghi nhận
       if (path.includes('admin') || path.includes('internal')) {
         findings.push(normalizeFinding({
           ruleId: 'A01-FB-003',

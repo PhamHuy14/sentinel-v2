@@ -26,6 +26,9 @@ export const UrlScanForm: React.FC = () => {
     <>
       <div className="section">
         <div className="section-label">Mục tiêu</div>
+        <div className="quick-help-box">
+          Chế độ mặc định phù hợp cho người mới: <strong>Độ sâu 1 cấp</strong> + <strong>60 request</strong>.
+        </div>
 
         <div className="field">
           <label className="field-label">URL</label>
@@ -76,10 +79,10 @@ export const UrlScanForm: React.FC = () => {
         {/* Gợi ý cấu hình scan */}
         <div className="scan-profile-hint">
           {crawlDepth >= 2 || requestBudget >= 100
-            ? '🔴 Quét kỹ — có thể mất 60–120 giây'
+            ? '🔴 Quét chuyên sâu — có thể mất 60-120 giây'
             : crawlDepth === 1 && requestBudget >= 60
-            ? '🟡 Quét cân bằng — khoảng 30–60 giây'
-            : '🟢 Quét nhanh — khoảng 10–30 giây'}
+            ? '🟡 Quét cân bằng — khoảng 30-60 giây'
+            : '🟢 Quét nhanh — khoảng 10-30 giây'}
         </div>
       </div>
 

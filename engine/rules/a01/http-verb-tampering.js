@@ -1,24 +1,24 @@
 /**
- * HTTP Verb Tampering Heuristic
- * OWASP Reference: OTG-CONFIG-006
- * Detects dangerous HTTP methods enabled, and endpoints that block GET
- * but may allow bypass via HEAD/POST/arbitrary verbs.
+ * Quy tắc kinh nghiệm giả mạo phương thức HTTP
+ * Tham chiếu OWASP: OTG-CONFIG-006
+ * Phát hiện HTTP method nguy hiểm đang bật và các endpoint chặn GET
+ * nhưng có thể bị vượt qua bằng HEAD/POST/method tùy ý.
  */
 
 const { normalizeFinding } = require('../../models/finding');
 
-// Methods that should not be enabled on a production web app
+// Phương thức không nên bật trên ứng dụng production
 const DANGEROUS_METHODS = ['PUT', 'DELETE', 'TRACE', 'CONNECT', 'PATCH'];
 
-// Methods that might bypass auth checks (some frameworks treat HEAD as GET)
+// Phương thức có thể vượt qua kiểm tra xác thực (một số framework coi HEAD như GET)
 const BYPASS_CANDIDATE_METHODS = ['HEAD', 'OPTIONS'];
 
-// WebDAV methods — usually unnecessary for web apps
+// Phương thức WebDAV, thường không cần cho web app thông thường
 const WEBDAV_METHODS = ['PROPFIND', 'PROPPATCH', 'MKCOL', 'COPY', 'MOVE', 'LOCK', 'UNLOCK'];
 
 /**
- * Parse the Allow header from an OPTIONS response.
- * Returns array of method strings, uppercased.
+ * Phân tích Allow header từ phản hồi OPTIONS.
+ * Trả về mảng phương thức đã chuyển thành chữ hoa.
  */
 function parseAllowHeader(allowHeaderValue) {
   if (!allowHeaderValue) return [];
@@ -34,7 +34,7 @@ function runHttpVerbTampering(context) {
   const responseHeaders = context.responseHeaders || {};
 
   // ----------------------------------------------------------------
-  // 1. Check Allow header from OPTIONS response on current endpoint
+  // 1. Kiểm tra Allow header từ phản hồi OPTIONS của endpoint hiện tại
   // ----------------------------------------------------------------
   const allowHeader =
     responseHeaders.allow ||
@@ -119,12 +119,12 @@ function runHttpVerbTampering(context) {
   }
 
   // ----------------------------------------------------------------
-  // 2. Detect 403 endpoints in surfaceStatus → candidates for verb bypass
+  // 2. Phát hiện endpoint 403 trong surfaceStatus -> ứng viên vượt qua bằng giả mạo phương thức
   // ----------------------------------------------------------------
   const blockedPaths = [];
   for (const [path, info] of Object.entries(surfaceStatus)) {
     if (!info || !info.status) continue;
-    // 403 = resource exists but GET is forbidden → test other verbs
+    // 403 = tài nguyên tồn tại nhưng GET bị chặn -> cần kiểm tra các phương thức khác
     if (info.status === 403) {
       blockedPaths.push(path);
     }
@@ -156,7 +156,7 @@ function runHttpVerbTampering(context) {
   }
 
   // ----------------------------------------------------------------
-  // 3. Check current request method is non-standard (JEFF, CATS trick)
+  // 3. Kiểm tra phương thức hiện tại có phải method không chuẩn (JEFF, CATS)
   // ----------------------------------------------------------------
   const currentMethod = (context.method || '').toUpperCase();
   const standardMethods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS', 'CONNECT', 'TRACE'];

@@ -9,6 +9,9 @@ const { runCookieFlags } = require('../rules/a02/cookie-flags');
 const { runCorsMisconfig } = require('../rules/a02/cors-misconfig');
 const { runDangerousMethods } = require('../rules/a02/dangerous-methods');
 const { runDebugExposure } = require('../rules/a02/debug-exposure');
+const { runServerHeaderExposure } = require('../rules/a02/server-header-exposure');
+const { runTransportSecurity } = require('../rules/a02/transport-security');
+const { runSensitiveFileExposure } = require('../rules/a02/sensitive-file-exposure');
 
 // ── A03 ──────────────────────────────────────────────────────────────────────
 const { runNpmDependencyRisk } = require('../rules/a03/npm-dependency-risk');
@@ -63,6 +66,9 @@ function runUrlRules(context) {
     ...runCorsMisconfig(context),
     ...runDangerousMethods(context),
     ...runDebugExposure(context),
+    ...runServerHeaderExposure(context),
+    ...runTransportSecurity(context),
+    ...runSensitiveFileExposure(context),
     ...runHttpInsecure(context),
     ...runSensitiveDataExposure(context),
     ...runMixedContent(context),

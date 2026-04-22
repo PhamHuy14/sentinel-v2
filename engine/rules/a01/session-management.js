@@ -1,20 +1,20 @@
 /**
- * Session Management Bypass Heuristic
- * OWASP Reference: OTG-SESS-001
- * Detects weak/predictable session tokens, insecure session cookie attributes,
- * and session fixation indicators.
+ * Quy tắc kinh nghiệm về bypass liên quan quản lý phiên
+ * Tham chiếu OWASP: OTG-SESS-001
+ * Phát hiện session token yếu/dễ đoán, thuộc tính cookie phiên không an toàn,
+ * và dấu hiệu session fixation.
  */
 
 const { normalizeFinding } = require('../../models/finding');
 
 /**
- * Try to base64-decode a string and return decoded value.
- * Returns null if not valid base64 or result is not printable.
+ * Thử giải mã chuỗi base64 và trả về giá trị đã giải mã.
+ * Trả về null nếu không phải base64 hợp lệ hoặc kết quả không thể in.
  */
 function tryBase64Decode(str) {
   try {
     const decoded = Buffer.from(str, 'base64').toString('utf8');
-    // Only return if it looks like printable text (not binary)
+    // Chỉ trả về khi trông giống văn bản có thể in (không phải dữ liệu nhị phân)
     if (/^[\x20-\x7E]+$/.test(decoded) && decoded.length >= 4) {
       return decoded;
     }
@@ -23,37 +23,37 @@ function tryBase64Decode(str) {
 }
 
 /**
- * Check if a token looks sequential/predictable.
- * Returns a description string if predictable, null otherwise.
+ * Kiểm tra token có mang tính tuần tự/dễ đoán hay không.
+ * Trả về chuỗi mô tả nếu dễ đoán, ngược lại trả về null.
  */
 function analyzeTokenPredictability(tokenValue) {
   if (!tokenValue) return null;
 
-  // All same character
+  // Toàn bộ là cùng một ký tự
   if (/^(.)\1+$/.test(tokenValue)) {
     return 'Token gồm toàn ký tự giống nhau';
   }
 
-  // Pure numeric — sequential risk
+  // Thuần số, có rủi ro tuần tự
   if (/^\d+$/.test(tokenValue) && tokenValue.length <= 10) {
     return 'Token thuần số ngắn — dễ brute-force/enumerate';
   }
 
-  // Very short token
+  // Token quá ngắn
   if (tokenValue.length < 16) {
     return `Token quá ngắn (${tokenValue.length} ký tự) — cần ít nhất 128-bit entropy`;
   }
 
-  // Looks like base64 of meaningful data
+  // Có vẻ là base64 của dữ liệu có nghĩa
   const decoded = tryBase64Decode(tokenValue);
   if (decoded) {
-    // Check if decoded value leaks info
+    // Kiểm tra giá trị giải mã có làm lộ thông tin không
     if (/user|admin|role|email|@|id=\d/i.test(decoded)) {
       return `Token có vẻ là base64 của thông tin nhạy cảm: "${decoded.substring(0, 50)}"`;
     }
   }
 
-  // Hex string that's too short
+  // Chuỗi hex quá ngắn
   if (/^[0-9a-f]+$/i.test(tokenValue) && tokenValue.length < 32) {
     return `Token hex quá ngắn (${tokenValue.length} hex chars = ${Math.floor(tokenValue.length / 2)} bytes)`;
   }
@@ -70,7 +70,7 @@ function runSessionManagementHeuristic(context) {
   const statusCode = context.statusCode || 0;
 
   // ----------------------------------------------------------------
-  // 1. Analyse Set-Cookie headers for insecure session cookies
+  // 1. Phân tích Set-Cookie để phát hiện cookie phiên không an toàn
   // ----------------------------------------------------------------
   const sessionCookieNames = /^(session|sessionid|sess|phpsessid|jsessionid|aspsessionid|connect\.sid|auth|token|access_token)/i;
 
@@ -83,29 +83,29 @@ function runSessionManagementHeuristic(context) {
 
     const issues = [];
 
-    // Check Secure flag
+    // Kiểm tra cờ Secure
     if (!cookie.secure) {
       issues.push('Thiếu Secure flag — token có thể bị gửi qua HTTP');
     }
 
-    // Check HttpOnly flag
+    // Kiểm tra cờ HttpOnly
     if (!cookie.httpOnly) {
       issues.push('Thiếu HttpOnly flag — token có thể bị đọc qua JavaScript (XSS)');
     }
 
-    // Check SameSite
+    // Kiểm tra SameSite
     const sameSite = (cookie.sameSite || '').toLowerCase();
     if (!sameSite || sameSite === 'none') {
       issues.push('Thiếu hoặc SameSite=None — dễ bị CSRF');
     }
 
-    // Check token predictability
+    // Kiểm tra tính dễ đoán của token
     const predictability = analyzeTokenPredictability(value);
     if (predictability) {
       issues.push(predictability);
     }
 
-    // Check expiry — session cookie should not have far-future expiry
+    // Kiểm tra thời hạn hết hạn: cookie phiên không nên hết hạn quá xa
     if (cookie.expires) {
       const expiry = new Date(cookie.expires);
       const now = new Date();
@@ -143,7 +143,7 @@ function runSessionManagementHeuristic(context) {
   }
 
   // ----------------------------------------------------------------
-  // 2. Session ID in URL (OTG-SESS-004)
+  // 2. Session ID xuất hiện trong URL (OTG-SESS-004)
   // ----------------------------------------------------------------
   const sessionInUrl = /(jsessionid|phpsessid|sessionid|sessid|sid|session)=[a-z0-9_-]{8,}/i.test(requestUrl);
   if (sessionInUrl) {
@@ -168,9 +168,9 @@ function runSessionManagementHeuristic(context) {
   }
 
   // ----------------------------------------------------------------
-  // 3. Session fixation indicator: same session token before/after login
+  // 3. Dấu hiệu session fixation: token không đổi trước/sau đăng nhập
   // ----------------------------------------------------------------
-  // This is detectable if context carries pre/post-login session info
+  // Chỉ phát hiện được khi context có thông tin phiên trước/sau đăng nhập
   const preLoginToken = context.preLoginSessionToken;
   const postLoginToken = context.postLoginSessionToken;
   if (preLoginToken && postLoginToken && preLoginToken === postLoginToken) {
@@ -198,11 +198,11 @@ function runSessionManagementHeuristic(context) {
   }
 
   // ----------------------------------------------------------------
-  // 4. Missing session invalidation on logout (check via response)
+  // 4. Thiếu hủy phiên khi logout (kiểm tra qua phản hồi)
   // ----------------------------------------------------------------
   const isLogoutEndpoint = /logout|signout|sign-out|log-out/i.test(requestUrl);
   if (isLogoutEndpoint && statusCode === 200) {
-    // After logout, Set-Cookie should clear session with expires in the past
+    // Sau logout, Set-Cookie cần xóa session bằng expires trong quá khứ
     const clearedSession = cookies.some(c => {
       const sessionCookie = sessionCookieNames.test(c.name || '');
       const isPastExpiry = c.expires && new Date(c.expires) < new Date();

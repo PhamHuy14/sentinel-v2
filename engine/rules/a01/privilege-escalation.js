@@ -1,12 +1,12 @@
 /**
- * Privilege Escalation Heuristic
- * OWASP Reference: OTG-AUTHZ-003
- * Detects attempts to escalate privileges via parameter/field manipulation.
+ * Quy tắc kinh nghiệm leo thang đặc quyền
+ * Tham chiếu OWASP: OTG-AUTHZ-003
+ * Phát hiện nỗ lực leo thang đặc quyền qua thao túng tham số/field.
  */
 
 const { normalizeFinding } = require('../../models/finding');
 
-// Patterns in request body / query that suggest privilege escalation attempts
+// Mẫu trong phần thân yêu cầu/tham số truy vấn gợi ý nỗ lực leo thang đặc quyền
 const REQUEST_ESCALATION_PATTERNS = [
   { pattern: /["'](role|roles)["']\s*:\s*["'](admin|superadmin|root|moderator|staff|superuser|operator)["']/i, label: 'role field với giá trị privileged' },
   { pattern: /["'](isAdmin|is_admin|admin)["']\s*:\s*(true|1|"true"|'true')/i, label: 'isAdmin=true trong request' },
@@ -16,14 +16,14 @@ const REQUEST_ESCALATION_PATTERNS = [
   { pattern: /["'](group|groups|user_group|userGroup)["']\s*:\s*["'](admin|superadmin|root|privileged)/i, label: 'group/userGroup privileged' },
 ];
 
-// Patterns in URL query string
+// Mẫu trong URL query string
 const QUERY_ESCALATION_PATTERNS = [
   /[?&](role|isAdmin|is_admin|admin|privilege|level)=(admin|superadmin|root|true|1|high)/i,
   /[?&](access|permission)=(full|all|write|admin)/i,
   /[?&](userType|user_type|accountType)=(admin|superuser|staff|privileged)/i,
 ];
 
-// Response patterns that suggest escalation succeeded
+// Mẫu trong phản hồi cho thấy leo thang đặc quyền thành công
 const RESPONSE_ESCALATION_INDICATORS = [
   { pattern: /"role"\s*:\s*"(admin|superadmin|root|moderator)"/i, label: 'role admin trong response' },
   { pattern: /"isAdmin"\s*:\s*true/i, label: 'isAdmin:true trong response' },
@@ -39,7 +39,7 @@ function runPrivilegeEscalationHeuristic(context) {
   const method = (context.method || 'GET').toUpperCase();
 
   // ----------------------------------------------------------------
-  // 1. Kiểm tra request body có chứa privilege manipulation không
+  // 1. Kiểm tra phần thân yêu cầu có chứa thao túng đặc quyền hay không
   // ----------------------------------------------------------------
   const requestMatches = [];
   for (const { pattern, label } of REQUEST_ESCALATION_PATTERNS) {
@@ -49,7 +49,7 @@ function runPrivilegeEscalationHeuristic(context) {
   }
 
   // ----------------------------------------------------------------
-  // 2. Kiểm tra query string có chứa privilege params không
+  // 2. Kiểm tra query string có chứa tham số đặc quyền hay không
   // ----------------------------------------------------------------
   const queryMatches = [];
   for (const pattern of QUERY_ESCALATION_PATTERNS) {
@@ -60,7 +60,7 @@ function runPrivilegeEscalationHeuristic(context) {
   }
 
   // ----------------------------------------------------------------
-  // 3. Correlation: request có escalation attempt VÀ response confirm
+  // 3. Tương quan: yêu cầu có nỗ lực leo thang VÀ phản hồi xác nhận
   // ----------------------------------------------------------------
   const responseMatches = [];
   for (const { pattern, label } of RESPONSE_ESCALATION_INDICATORS) {
@@ -69,7 +69,7 @@ function runPrivilegeEscalationHeuristic(context) {
     }
   }
 
-  // Case A: Request body + Response confirmation → HIGH confidence
+  // Trường hợp A: Phần thân yêu cầu + phản hồi xác nhận -> độ tin cậy cao
   if (requestMatches.length > 0 && responseMatches.length > 0) {
     findings.push(normalizeFinding({
       ruleId: 'A01-PRIV-001',
@@ -96,7 +96,7 @@ function runPrivilegeEscalationHeuristic(context) {
     }));
   }
 
-  // Case B: Chỉ request body có escalation attempt → MEDIUM confidence
+  // Trường hợp B: Chỉ phần thân yêu cầu có nỗ lực leo thang -> độ tin cậy trung bình
   if (requestMatches.length > 0 && responseMatches.length === 0) {
     findings.push(normalizeFinding({
       ruleId: 'A01-PRIV-002',
@@ -120,7 +120,7 @@ function runPrivilegeEscalationHeuristic(context) {
     }));
   }
 
-  // Case C: Query string escalation attempt
+  // Trường hợp C: Nỗ lực leo thang qua query string
   if (queryMatches.length > 0) {
     findings.push(normalizeFinding({
       ruleId: 'A01-PRIV-003',
