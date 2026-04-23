@@ -64,9 +64,7 @@ function analyzeTokenPredictability(tokenValue) {
 function runSessionManagementHeuristic(context) {
   const findings = [];
   const cookies = context.setCookies || context.cookieFlags || [];
-  const responseHeaders = context.responseHeaders || {};
   const requestUrl = context.finalUrl || '';
-  const responseText = context.text || '';
   const statusCode = context.statusCode || 0;
 
   // ----------------------------------------------------------------

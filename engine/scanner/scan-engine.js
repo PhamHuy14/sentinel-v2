@@ -2,6 +2,8 @@
 // engine/scanner/scan-engine.js
 // ── Sentinel v2 — Upgraded: Attack Surface scoring, Tech Stack fingerprint, Stop signal, URL dedup
 
+const path = require('path');
+
 const { ensureHttpUrl } = require('../utils/url');
 const { toHeaderObject, buildRequestHeaders, summarizeAuth } = require('../utils/http');
 const { responseFingerprint } = require('../utils/diff');
@@ -15,7 +17,7 @@ const { runUrlRules, runProjectRules } = require('./rule-engine');
 const { runDynamicFuzzing } = require('./fuzzer');
 const { summarizeFindings } = require('../report/report-engine');
 
-const { walkFiles } = require('../collectors/source/project-loader');
+const { walkFiles, readTextSafe } = require('../collectors/source/project-loader');
 const { collectDependencyArtifacts } = require('../collectors/source/dependency-scanner');
 const { collectConfigFiles, collectCiFiles } = require('../collectors/source/config-scanner');
 const { collectTextFiles } = require('../collectors/source/secret-scanner');
@@ -537,15 +539,30 @@ async function runProjectScan(folderPath, options = {}) {
 
   if (abortSignal?.aborted) return ABORTED;
 
+  // ── Additional context for A03 rules ─────────────────────────────────────
+  const webConfigFiles = files
+    .filter((f) => f.toLowerCase().endsWith('web.config'))
+    .map((f) => ({ path: f, content: readTextSafe(f) }));
+
+  const gitignorePath = files.find((f) => path.basename(f) === '.gitignore');
+  const gitignoreContent = gitignorePath ? readTextSafe(gitignorePath) : undefined;
+
+  const hasLockfile = !!dependencyArtifacts.packageLockPath;
+
   onProgress({ stage: 'analyze', msg: 'Chạy rule engine cho project…', level: 'info', ts: Date.now() });
 
   const context = {
     folderPath, files,
+    repoRoot: folderPath,
+    sourceFiles: files,
     packageJson:     dependencyArtifacts.packageJson,
     packageJsonPath: dependencyArtifacts.packageJsonPath,
     packageLockJson: dependencyArtifacts.packageLockJson,
     packageLockPath: dependencyArtifacts.packageLockPath,
+    hasLockfile,
     csprojFiles:     dependencyArtifacts.csprojFiles,
+    webConfigFiles,
+    gitignoreContent,
     configFiles, textFiles, codeFiles, ciFiles,
   };
 

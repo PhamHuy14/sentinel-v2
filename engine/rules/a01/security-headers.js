@@ -43,7 +43,6 @@ function runSecurityHeadersHeuristic(context) {
   if (isSensitive && (isHtml || isJson)) {
     const cacheControl = (h['cache-control'] || '').toLowerCase();
     const pragma = (h.pragma || '').toLowerCase();
-    const expires = h.expires || '';
 
     const hasNoStore = cacheControl.includes('no-store');
     const hasNoCache = cacheControl.includes('no-cache') || pragma.includes('no-cache');

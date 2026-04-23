@@ -10,9 +10,6 @@ const { normalizeFinding } = require('../../models/finding');
 // Phương thức không nên bật trên ứng dụng production
 const DANGEROUS_METHODS = ['PUT', 'DELETE', 'TRACE', 'CONNECT', 'PATCH'];
 
-// Phương thức có thể vượt qua kiểm tra xác thực (một số framework coi HEAD như GET)
-const BYPASS_CANDIDATE_METHODS = ['HEAD', 'OPTIONS'];
-
 // Phương thức WebDAV, thường không cần cho web app thông thường
 const WEBDAV_METHODS = ['PROPFIND', 'PROPPATCH', 'MKCOL', 'COPY', 'MOVE', 'LOCK', 'UNLOCK'];
 

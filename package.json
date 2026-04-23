@@ -3,14 +3,15 @@
   "version": "2.0.0",
   "description": "OWASP 2025 Security Workbench",
   "main": "dist-electron/main.js",
-  "packageManager": "npm@10",
+  "packageManager": "npm@11.6.2",
   "engines": {
-    "node": ">=20 <21",
-    "npm": ">=10 <11"
+    "node": ">=20",
+    "npm": ">=10"
   },
   "scripts": {
     "dev": "vite",
-    "build": "npm run typecheck && vite build",
+    "check:engines": "node scripts/check-engines.js",
+    "build": "npm run check:engines && npm run typecheck && vite build",
     "lint": "npm run lint:renderer && npm run lint:node",
     "lint:fix": "npm run lint:renderer:fix && npm run lint:node:fix",
     "lint:renderer": "eslint src/ --ext .ts,.tsx",
@@ -21,7 +22,7 @@
     "typecheck": "npm run typecheck:renderer && npm run typecheck:node",
     "typecheck:renderer": "tsc --noEmit -p tsconfig.json",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
-    "test": "vitest run --config vitest.config.ts",
+    "test": "npm run check:engines && vitest run --config vitest.config.ts",
     "test:watch": "vitest --config vitest.config.ts",
     "dist": "npm run build && electron-builder --win portable",
     "clean": "rimraf dist dist-electron"
@@ -47,7 +48,7 @@
     "eslint-plugin-react-hooks": "^4.6.2",
     "prettier": "^3.3.2",
     "rimraf": "^5.0.7",
-    "typescript": "^5.5.2",
+    "typescript": "5.5.4",
     "vite": "^5.3.1",
     "vite-plugin-electron": "^0.28.7",
     "vite-plugin-electron-renderer": "^0.14.5",

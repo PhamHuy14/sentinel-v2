@@ -202,7 +202,7 @@ export const ResultsPanel: React.FC = () => {
     if (!scanResult) return;
     // Với scan nhiều findings, mặc định thu gọn overview để ưu tiên vùng hiển thị lỗi.
     setShowOverview(scanResult.findings.length <= 3);
-  }, [scanResult?.mode, scanResult?.target, scanResult?.scannedUrl, scanResult?.findings.length]);
+  }, [scanResult]);
 
   if (isLoading) return null;
   if (error) return <div className="error-bar">{error}</div>;

@@ -16,10 +16,13 @@ const { runSensitiveFileExposure } = require('../rules/a02/sensitive-file-exposu
 // ── A03 ──────────────────────────────────────────────────────────────────────
 const { runNpmDependencyRisk } = require('../rules/a03/npm-dependency-risk');
 const { runNugetDependencyRisk } = require('../rules/a03/nuget-dependency-risk');
+const { runDotnetFrameworkVersionRisk } = require('../rules/a03/dotnet-framework-version-risk');
+const { runNodeEngineVersionRisk } = require('../rules/a03/node-engine-version-risk');
+const { runSensitiveFileExposureRisk } = require('../rules/a03/sensitive-file-exposure-risk');
 const { runPackageLockConsistency, runTyposquattingRisk, runCiCdSecurityGates, runSensitiveDataInLogs, runStructuredLogging } = require('../rules/source-enhanced/supply-chain-enhanced');
 
 // ── A04 ──────────────────────────────────────────────────────────────────────
-const { runHttpInsecure, runSensitiveDataExposure, runMixedContent, runCookieSecureOnHttps } = require('../rules/a04/crypto-failures');
+const { runA04Rules } = require('../rules/a04');
 
 // ── A05 ──────────────────────────────────────────────────────────────────────
 const { runReflectedXss } = require('../rules/a05/reflected-xss');
@@ -69,10 +72,7 @@ function runUrlRules(context) {
     ...runServerHeaderExposure(context),
     ...runTransportSecurity(context),
     ...runSensitiveFileExposure(context),
-    ...runHttpInsecure(context),
-    ...runSensitiveDataExposure(context),
-    ...runMixedContent(context),
-    ...runCookieSecureOnHttps(context),
+    ...runA04Rules(context),
     ...runReflectedXss(context),
     ...runSqliErrorBased(context),
     ...runSqliEnhanced(context),
@@ -99,6 +99,9 @@ function runProjectRules(context) {
   const findings = [
     ...runNpmDependencyRisk(context),
     ...runNugetDependencyRisk(context),
+    ...runDotnetFrameworkVersionRisk(context),
+    ...runNodeEngineVersionRisk(context),
+    ...runSensitiveFileExposureRisk(context),
     ...runPackageLockConsistency(context),
     ...runTyposquattingRisk(context),
     ...runMissingIntegrityCheck(context),
