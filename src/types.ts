@@ -113,6 +113,13 @@ declare global {
         scanResult: ScanResult;
       }) => Promise<{ ok: boolean; filePath?: string; canceled?: boolean; error?: string }>;
       stopScan: () => Promise<{ ok: boolean; error?: string }>;
+      aiFetch: (payload: {
+        url: string;
+        method?: string;
+        headers?: Record<string, string>;
+        body?: string;
+        timeoutMs?: number;
+      }) => Promise<{ ok: boolean; status: number; body: string; headers?: Record<string, string>; error?: string }>;
       onScanProgress: (cb: (event: ScanProgressEvent) => void) => unknown;
       offScanProgress: (listener?: unknown) => void;
     };

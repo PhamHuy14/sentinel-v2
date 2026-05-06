@@ -1,38 +1,38 @@
 /**
- * Sanitizer — security layer before any prompt reaches an external LLM API
+ * Sanitizer — lớp bảo mật trước khi bất kỳ prompt nào được gửi đến API LLM bên ngoài
  *
- * 1. Redacts secrets / tokens / credentials
- * 2. Applies basic prompt-injection guardrails
- * 3. Truncates to token budget
+ * 1. Che giấu (redact) các secret / token / credential
+ * 2. Áp dụng các biện pháp bảo vệ cơ bản chống lại prompt-injection
+ * 3. Cắt xén (truncate) để phù hợp với ngân sách token
  */
 
-// ── Redaction ──────────────────────────────────────────────────────────────────
+// ── Che giấu dữ liệu nhạy cảm (Redaction) ──────────────────────────────────────────────────────────────────
 
 /**
- * Patterns that look like secrets.
- * We replace them with a safe placeholder so they are never sent externally.
+ * Các pattern trông giống như secret.
+ * Chúng ta thay thế chúng bằng một placeholder an toàn để chúng không bao giờ được gửi ra bên ngoài.
  */
 const REDACT_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
-  // Generic Bearer / API tokens
-  { label: 'BEARER_TOKEN',    pattern: /Bearer\s+[A-Za-z0-9\-._~+/]+=*/gi },
-  // OpenAI-style keys
+  // Token Bearer / API chung
+  { label: 'BEARER_TOKEN',    pattern: /Bearer\s+[A-Za-z0-9._~+/-]+=*/gi },
+  // Key dạng OpenAI
   { label: 'OPENAI_KEY',      pattern: /sk-[A-Za-z0-9]{20,}/g },
-  // Groq / together style keys (gsk_...)
+  // Key dạng Groq / together (gsk_...)
   { label: 'GROQ_KEY',        pattern: /gsk_[A-Za-z0-9]{20,}/g },
-  // HuggingFace tokens (hf_...)
+  // Token HuggingFace (hf_...)
   { label: 'HF_TOKEN',        pattern: /hf_[A-Za-z0-9]{20,}/g },
-  // Generic secrets in assignments  KEY=VALUE, "key": "value"
+  // Secret chung trong gán giá trị KEY=VALUE, "key": "value"
   {
     label: 'ENV_SECRET',
-    pattern: /(?:api[_-]?key|secret|token|password|passwd|pwd|auth)[=:\s"']+[A-Za-z0-9\-._~+/]{8,}/gi,
+    pattern: /(?:api[_-]?key|secret|token|password|passwd|pwd|auth)[=:\s"']+[A-Za-z0-9._~+/-]{8,}/gi,
   },
-  // AWS access keys
+  // Access key AWS
   { label: 'AWS_KEY',         pattern: /AKIA[0-9A-Z]{16}/g },
-  // Private key headers
+  // Private key header
   { label: 'PRIVATE_KEY',     pattern: /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g },
-  // Email addresses (PII)
-  { label: 'EMAIL',           pattern: /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g },
-  // IPv4 private ranges (minimal leak risk, keep public IPs)
+  // Địa chỉ email (PII)
+  { label: 'EMAIL',           pattern: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g },
+  // Dải IPv4 nội bộ (nguy cơ rò rỉ thấp, giữ lại IP công cộng)
   { label: 'PRIVATE_IP',      pattern: /\b(?:10|172\.(?:1[6-9]|2\d|3[01])|192\.168)\.\d{1,3}\.\d{1,3}\b/g },
 ];
 
@@ -59,11 +59,11 @@ export function redactSecrets(input: string): RedactResult {
   return { text, redactedCount, labels };
 }
 
-// ── Prompt injection guardrail ─────────────────────────────────────────────────
+// ── Rào chắn bảo vệ Prompt injection ─────────────────────────────────────────────────
 
 /**
- * Common injection phrases that try to override system instructions.
- * We strip or neuter them before forwarding.
+ * Các cụm từ injection phổ biến cố gắng ghi đè hướng dẫn hệ thống.
+ * Chúng ta sẽ loại bỏ hoặc làm mất hiệu lực chúng trước khi chuyển tiếp.
  */
 const INJECTION_PATTERNS: RegExp[] = [
   /ignore\s+(?:all\s+)?(?:previous|prior|above|system)\s+instructions?/gi,
@@ -92,11 +92,11 @@ export function guardInjection(input: string): { text: string; injectionDetected
   return { text, injectionDetected };
 }
 
-// ── Token budget ───────────────────────────────────────────────────────────────
+// ── Ngân sách Token (Token budget) ───────────────────────────────────────────────────────────────
 
 /**
- * Very rough approximation: 1 token ≈ 4 chars.
- * This avoids loading a full tokenizer for a browser/Electron context.
+ * Ước lượng rất thô: 1 token ≈ 4 ký tự.
+ * Điều này giúp tránh tải một tokenizer đầy đủ cho context trình duyệt/Electron.
  */
 export function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
@@ -108,7 +108,7 @@ export function truncateToTokenBudget(text: string, maxTokens: number): string {
   return text.slice(0, maxChars) + '\n[... truncated for length ...]';
 }
 
-// ── Combined sanitize pipeline ─────────────────────────────────────────────────
+// ── Luồng xử lý làm sạch tổng hợp (Combined sanitize pipeline) ─────────────────────────────────────────────────
 export interface SanitizeResult {
   prompt: string;
   warnings: string[];
@@ -117,22 +117,22 @@ export interface SanitizeResult {
 export function sanitizePrompt(raw: string, maxInputTokens: number): SanitizeResult {
   const warnings: string[] = [];
 
-  // Step 1: redact secrets
+  // Bước 1: che giấu secret
   const redacted = redactSecrets(raw);
   if (redacted.redactedCount > 0) {
-    warnings.push(`Redacted ${redacted.redactedCount} sensitive pattern(s): ${redacted.labels.join(', ')}`);
+    warnings.push(`Đã che giấu ${redacted.redactedCount} mẫu dữ liệu nhạy cảm: ${redacted.labels.join(', ')}`);
   }
 
-  // Step 2: injection guard
+  // Bước 2: bảo vệ chống injection
   const guarded = guardInjection(redacted.text);
   if (guarded.injectionDetected) {
-    warnings.push('Potential prompt injection blocked');
+    warnings.push('Đã chặn nguy cơ prompt injection');
   }
 
-  // Step 3: truncate
+  // Bước 3: cắt xén (truncate)
   const truncated = truncateToTokenBudget(guarded.text, maxInputTokens);
   if (truncated !== guarded.text) {
-    warnings.push(`Prompt truncated to ${maxInputTokens} tokens`);
+    warnings.push(`Đã cắt xén prompt còn ${maxInputTokens} tokens`);
   }
 
   return { prompt: truncated, warnings };

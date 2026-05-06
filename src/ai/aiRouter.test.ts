@@ -6,7 +6,7 @@ describe('aiRouter routing', () => {
     const ans = routeQuery({ question: 'Docker security là gì?' });
     expect(ans).toContain('Docker security');
     expect(ans).toContain('hardening container images');
-    // Regression guard: previously `extractTopic()` could return `path_traversal` for everything.
+    // Đảm bảo không bị hồi quy (Regression guard): trước đây `extractTopic()` có thể trả về `path_traversal` cho mọi thứ.
     expect(ans).not.toContain('Attack using ../');
   });
 

@@ -1,33 +1,33 @@
 /**
- * Cross-Checker
+ * Cross-Checker (Trình kiểm tra chéo)
  *
- * Compares two answers from independent providers and decides:
- *  - Are they in agreement (high overlap)?
- *  - Do they contradict each other?
- *  - What confidence level should be assigned?
+ * So sánh hai câu trả lời từ các nhà cung cấp độc lập và quyết định:
+ *  - Chúng có đồng thuận không (mức độ trùng lặp cao)?
+ *  - Chúng có mâu thuẫn với nhau không?
+ *  - Mức độ tin cậy (confidence level) nào nên được gán?
  *
- * Uses heuristics only (no external embedding call) so it works offline:
- *  1. Token-overlap Jaccard similarity
- *  2. Contradiction signal words
- *  3. Policy / safety keyword check
+ * Chỉ sử dụng phương pháp heuristic (không gọi hàm embedding bên ngoài) để có thể hoạt động ngoại tuyến:
+ *  1. Độ tương đồng Jaccard dựa trên mức độ trùng lặp token
+ *  2. Các từ mang tín hiệu mâu thuẫn
+ *  3. Kiểm tra từ khóa về chính sách / an toàn
  */
 
 export interface CrossCheckResult {
-  /** Final chosen answer */
+  /** Câu trả lời được chọn cuối cùng */
   chosenAnswer: string;
-  /** Which provider's answer was chosen: 'primary' | 'secondary' | 'synthesized' */
+  /** Câu trả lời được chọn từ nhà cung cấp nào: 'primary' | 'secondary' | 'synthesized' */
   chosenFrom: 'primary' | 'secondary' | 'synthesized';
-  /** 0–1 confidence after cross-check */
+  /** Độ tin cậy từ 0–1 sau khi kiểm tra chéo */
   confidence: number;
-  /** Human-readable reason */
+  /** Lý do (rationale) có thể đọc được bởi con người */
   rationale: string;
-  /** True when answers agreed (no contradiction detected) */
+  /** True khi các câu trả lời đồng thuận (không phát hiện mâu thuẫn) */
   agreed: boolean;
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
+// ── Trình trợ giúp (Helpers) ────────────────────────────────────────────────────────────────────
 
-/** Basic text tokeniser: lowercase words ≥ 3 chars */
+/** Trình token hóa văn bản cơ bản (Basic text tokeniser): viết thường các từ có ≥ 3 ký tự */
 function tokenize(text: string): Set<string> {
   return new Set(
     text
@@ -38,7 +38,7 @@ function tokenize(text: string): Set<string> {
   );
 }
 
-/** Jaccard similarity between two token sets */
+/** Độ tương đồng Jaccard giữa hai tập hợp token */
 function jaccard(a: Set<string>, b: Set<string>): number {
   if (a.size === 0 && b.size === 0) return 1;
   let intersection = 0;
@@ -47,7 +47,7 @@ function jaccard(a: Set<string>, b: Set<string>): number {
   return union === 0 ? 0 : intersection / union;
 }
 
-/** Check if text B explicitly contradicts text A via negation signals */
+/** Kiểm tra xem văn bản B có mâu thuẫn rõ ràng với văn bản A thông qua các tín hiệu phủ định không */
 const CONTRADICTION_SIGNALS = [
   /\bnot\b.{0,20}\b(safe|secure|recommended|correct|true)\b/i,
   /\bincorrect\b/i,
@@ -64,7 +64,7 @@ function hasContradictionSignal(text: string): boolean {
   return CONTRADICTION_SIGNALS.some(p => p.test(text));
 }
 
-/** Very basic safety / policy check: returns flagged phrases */
+/** Kiểm tra an toàn / chính sách ở mức rất cơ bản: trả về các cụm từ bị gắn cờ vi phạm */
 const UNSAFE_PATTERNS: RegExp[] = [
   /exploit\s+this\s+vulnerability/i,
   /step[- ]by[- ]step\s+attack/i,
@@ -77,12 +77,12 @@ function hasUnsafeContent(text: string): boolean {
   return UNSAFE_PATTERNS.some(p => p.test(text));
 }
 
-// ── Main cross-check ───────────────────────────────────────────────────────────
+// ── Kiểm tra chéo chính (Main cross-check) ───────────────────────────────────────────────────────────
 
 /**
- * AGREEMENT thresholds:
- *   Jaccard ≥ 0.30 → treat as agreeing
- *   Jaccard < 0.10 → treat as contradicting
+ * Ngưỡng ĐỒNG THUẬN (AGREEMENT thresholds):
+ *   Jaccard ≥ 0.30 → coi như đồng thuận
+ *   Jaccard < 0.10 → coi như mâu thuẫn
  */
 const AGREE_THRESHOLD       = 0.30;
 const CONTRADICT_THRESHOLD  = 0.10;
@@ -95,7 +95,7 @@ export function crossCheck(primaryAnswer: string, secondaryAnswer: string): Cros
   const primaryUnsafe   = hasUnsafeContent(primaryAnswer);
   const secondaryUnsafe = hasUnsafeContent(secondaryAnswer);
 
-  // If primary is unsafe but secondary is not, prefer secondary
+  // Nếu primary không an toàn nhưng secondary an toàn, ưu tiên chọn secondary
   if (primaryUnsafe && !secondaryUnsafe) {
     return {
       chosenAnswer: secondaryAnswer,
@@ -106,7 +106,7 @@ export function crossCheck(primaryAnswer: string, secondaryAnswer: string): Cros
     };
   }
 
-  // Both unsafe — return synthesised disclaimer
+  // Cả hai đều không an toàn — trả về cảnh báo miễn trừ trách nhiệm được tổng hợp
   if (primaryUnsafe && secondaryUnsafe) {
     return {
       chosenAnswer:
@@ -119,9 +119,9 @@ export function crossCheck(primaryAnswer: string, secondaryAnswer: string): Cros
     };
   }
 
-  // High similarity → agreement
+  // Độ tương đồng cao → đồng thuận
   if (similarity >= AGREE_THRESHOLD) {
-    // Pick the longer, more detailed answer
+    // Chọn câu trả lời dài hơn, chi tiết hơn
     const chosen = primaryAnswer.length >= secondaryAnswer.length ? primaryAnswer : secondaryAnswer;
     const from   = chosen === primaryAnswer ? 'primary' : 'secondary';
     return {
@@ -133,12 +133,12 @@ export function crossCheck(primaryAnswer: string, secondaryAnswer: string): Cros
     };
   }
 
-  // Potential contradiction
+  // Tiềm ẩn khả năng mâu thuẫn
   const primaryContradicts   = hasContradictionSignal(primaryAnswer);
   const secondaryContradicts = hasContradictionSignal(secondaryAnswer);
 
   if (similarity < CONTRADICT_THRESHOLD || (primaryContradicts && secondaryContradicts)) {
-    // Strong contradiction — synthesise a hedged response
+    // Mâu thuẫn mạnh — tổng hợp một câu trả lời phòng hờ (hedged response)
     const synthesised =
       `**Note: Multiple sources gave different perspectives on this question.**\n\n` +
       `**Primary answer:**\n${primaryAnswer}\n\n` +
@@ -153,7 +153,7 @@ export function crossCheck(primaryAnswer: string, secondaryAnswer: string): Cros
     };
   }
 
-  // Partial overlap — prefer primary, note low confidence
+  // Trùng lặp một phần — ưu tiên primary, ghi nhận độ tin cậy thấp
   return {
     chosenAnswer: primaryAnswer,
     chosenFrom: 'primary',

@@ -1,36 +1,85 @@
 /**
- * Hybrid AI Orchestrator
+ * Hybrid AI Orchestrator (Dieu phoi AI lai)
  *
- * Implements the 3-layer architecture:
- *   Layer 1 → Knowledge Base (offline FAQ, instant, highest priority)
- *   Layer 2 → Multi-provider LLM (external APIs, fallback)
- *   Layer 3 → Cross-checker / synthesiser (verifier built into LLMRouter)
+ * Trien khai kien truc 3 lop (3-layer architecture):
+ *   Lop 1 -> Knowledge Base (FAQ ngoai tuyen, phan hoi ngay lap tuc, uu tien cao nhat)
+ *   Lop 2 -> LLM Da nha cung cap (API ben ngoai, dung du phong)
+ *   Lop 3 -> Trinh kiem tra cheo / tong hop (trinh xac minh duoc tich hop vao LLMRouter)
  *
- * This is the single entry-point that replaces direct calls to routeQuery()
- * from UI components. It is backward-compatible: callers that only need
- * a plain string answer can call `orchestrate()` and read `.answer`.
+ * NANG CAP v2:
+ *  - KB_MIN_LENGTH tang tu 80 -> 200: KB can cau tra loi du dai moi khong can LLM
+ *  - Them logic HYBRID: ket hop KB + LLM khi KB tra loi duoc nhung cau hoi phuc tap
+ *  - Phat hien cau hoi "can giai thich sau" de luon goi LLM
+ *  - OOS_MARKERS mo rong de bat chinh xac hon
+ *  - Fallback graceful: khong hien thi loi tho voi user
  */
 
 import { AiQueryPayload, routeQuery } from '../aiRouter.js';
-import { AiResponse } from './types.js';
 import { LLMRouter } from './llmRouter.js';
+import { AiResponse } from './types';
 
-// ── Thresholds ─────────────────────────────────────────────────────────────────
-/** Minimum KB answer length to be considered "good enough" — skip LLM */
-const KB_MIN_LENGTH = 80;
-/** Score returned by routeQuery that indicates an OOS / fallback response */
+// ── Nguong cai tien ─────────────────────────────────────────────────────────────────
+
+/**
+ * NANG CAP: Tang tu 80 -> 200.
+ * KB can co cau tra loi du chat luong (it nhat 200 ky tu) moi duoc xem la "tot".
+ * Dieu nay khien cac cau hoi phuc tap duoc escalate sang LLM thuong xuyen hon.
+ */
+const KB_MIN_LENGTH = 200;
+
+/**
+ * Do dai KB toi thieu cho cau hoi don gian (chao hoi, liet ke topic, v.v.)
+ * Cac cau tra loi nay khong can LLM.
+ */
+const KB_SHORT_ANSWER_MIN = 50;
+
+/** Marker nhan biet cau tra loi nam ngoai pham vi KB hoac la fallback */
 const OOS_MARKERS = [
-  'Ngoài phạm vi hỗ trợ',
-  'Chưa có trong knowledge base',
-  'Tôi là AI assistant **chuyên về bảo mật web**',
+  'Ngoai pham vi ho tro',
+  'Chua co trong knowledge base',
+  'Toi la AI assistant **chuyen ve bao mat web**',
   '⚠️ **AI service temporarily unavailable.**',
+  'Cau hoi nay nam ngoai',
+  'khong thuoc pham vi',
 ];
 
-function isOOSResponse(text: string): boolean {
-  return OOS_MARKERS.some(m => text.includes(m));
+/** Marker nhan biet day la cau tra loi don gian tu KB (khong can LLM bo sung) */
+const SIMPLE_KB_MARKERS = [
+  '## Toi ho tro nhung chu de nao',
+  '## Toi la SENTINEL AI Assistant',
+  'Xin chao!',
+  'Cam on ban',
+  'Rat vui',
+];
+
+/** Tu khoa goi y cau hoi can giai thich sau -> luon dung LLM */
+const DEEP_EXPLAIN_MARKERS = [
+  'tai sao', 'why', 'co che', 'mechanism', 'hoat dong nhu the nao',
+  'how does', 'chi tiet', 'phan tich sau', 'so sanh', 'compare',
+  'khac nhau', 'difference', 'vi du thuc te', 'real example',
+  'cach khai thac', 'how to exploit', 'demonstrate', 'giai thich ky',
+];
+
+function stripDiacritics(text: string): string {
+  return text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
-// ── Orchestrator ───────────────────────────────────────────────────────────────
+function isOOSResponse(text: string): boolean {
+  const norm = stripDiacritics(text);
+  return OOS_MARKERS.some(m => norm.includes(stripDiacritics(m)));
+}
+
+function isSimpleKBResponse(text: string): boolean {
+  const norm = stripDiacritics(text);
+  return SIMPLE_KB_MARKERS.some(m => norm.includes(stripDiacritics(m)));
+}
+
+function needsDeepExplanation(question: string): boolean {
+  const q = stripDiacritics(question);
+  return DEEP_EXPLAIN_MARKERS.some(m => q.includes(stripDiacritics(m)));
+}
+
+// ── Orchestrator ───────────────────────────────────────────────────────────────────
 export class HybridOrchestrator {
   private readonly llmRouter: LLMRouter | null;
 
@@ -39,23 +88,29 @@ export class HybridOrchestrator {
   }
 
   /**
-   * Main entry point.
-   * 1. Try KB (routeQuery) — if good answer, return it immediately.
-   * 2. If KB says OOS or answer is too short/generic, try LLM tier.
-   * 3. Merge warnings and metadata into canonical AiResponse.
+   * Diem truy cap chinh.
+   *
+   * Logic uu tien (v2):
+   * 1. KB tra loi cau don gian (chao/list topics) -> tra ve ngay, khong can LLM.
+   * 2. Cau hoi "can giai thich sau" -> bo qua KB, di thang LLM.
+   * 3. KB co cau tra loi du dai (>200 ky tu) va khong phai OOS -> tra ve tu KB.
+   *    (Tuy chon: neu co LLM va cau tra loi ngan-vua, them context tu LLM)
+   * 4. KB OOS hoac qua ngan -> dung LLM lam nguon chinh.
+   * 5. Neu LLM cung that bai -> tra ve KB du chat luong kem.
    */
   async orchestrate(payload: AiQueryPayload): Promise<AiResponse> {
-    const start = Date.now();
+    const start    = Date.now();
     const warnings: string[] = [];
+    const question = payload.question ?? '';
 
-    // ── Layer 1: Knowledge Base ───────────────────────────────────────────────
+    // ── Lop 1a: Cau tra loi KB ─────────────────────────────────────────────────
     const kbAnswer = routeQuery(payload);
-    const kbIsGood = kbAnswer.length >= KB_MIN_LENGTH && !isOOSResponse(kbAnswer);
 
-    if (kbIsGood) {
+    // Neu KB tra ve cau don gian (chao hoi, liet ke, v.v.) -> dung luon
+    if (isSimpleKBResponse(kbAnswer) && kbAnswer.length >= KB_SHORT_ANSWER_MIN) {
       return {
         answer:         kbAnswer,
-        confidence:     0.92,      // KB is authoritative for known topics
+        confidence:     0.90,
         providersTried: ['knowledge_base'],
         providerUsed:   'knowledge_base',
         crossChecked:   false,
@@ -65,12 +120,66 @@ export class HybridOrchestrator {
       };
     }
 
-    // ── Layer 2: LLM fallback ─────────────────────────────────────────────────
-    if (!this.llmRouter) {
-      // No LLM router configured — surface KB answer or OOS message
+    // ── Lop 1b: Bo qua KB neu can giai thich sau ─────────────────────────────
+    const skipKB = needsDeepExplanation(question) || kbAnswer === '' || isOOSResponse(kbAnswer);
+
+    // ── Lop 1c: KB du tot -> tra ve tu KB ─────────────────────────────────────
+    if (!skipKB && kbAnswer.length >= KB_MIN_LENGTH) {
+      // Neu LLM co san va cau tra loi KB vua phai (200-600 ky tu), bo sung them tu LLM
+      const shouldEnrichWithLLM = this.llmRouter !== null && kbAnswer.length < 600;
+
+      if (!shouldEnrichWithLLM) {
+        return {
+          answer:         kbAnswer,
+          confidence:     0.90,
+          providersTried: ['knowledge_base'],
+          providerUsed:   'knowledge_base',
+          crossChecked:   false,
+          warnings:       [],
+          latencyMs:      Date.now() - start,
+          source:         'knowledge_base',
+        };
+      }
+
+      try {
+        const enrichPayload = { ...payload, onToken: undefined };
+        const llmResponse = await this.llmRouter!.query(enrichPayload);
+        if (llmResponse.confidence >= 0.50 && !llmResponse.answer.includes('temporarily unavailable')) {
+          const enriched = `${kbAnswer}\n\n---\n**🤖 Bo sung tu AI:**\n\n${llmResponse.answer}`;
+          return {
+            ...llmResponse,
+            answer:         enriched,
+            confidence:     Math.max(0.85, llmResponse.confidence),
+            providersTried: ['knowledge_base', ...llmResponse.providersTried],
+            warnings:       [...llmResponse.warnings, ...warnings],
+            latencyMs:      Date.now() - start,
+            source:         'synthesized',
+          };
+        }
+      } catch {
+        // Neu LLM that bai khi enrich, van tra ve KB
+      }
+
       return {
         answer:         kbAnswer,
-        confidence:     0.40,
+        confidence:     0.88,
+        providersTried: ['knowledge_base'],
+        providerUsed:   'knowledge_base',
+        crossChecked:   false,
+        warnings,
+        latencyMs:      Date.now() - start,
+        source:         'knowledge_base',
+      };
+    }
+
+    // ── Lop 2: LLM lam nguon chinh ──────────────────────────────────────────────
+    if (!this.llmRouter) {
+      // Khong co LLM -> dung KB bat ke chat luong
+      return {
+        answer:         isOOSResponse(kbAnswer) || kbAnswer.length < 20
+          ? 'Cau hoi nay chua co trong knowledge base. Vui long thu cau hinh API key (Gemini/Groq/OpenRouter) de nhan cau tra loi tu AI.'
+          : kbAnswer,
+        confidence:     0.35,
         providersTried: ['knowledge_base'],
         providerUsed:   'knowledge_base',
         crossChecked:   false,
@@ -81,14 +190,18 @@ export class HybridOrchestrator {
     }
 
     try {
-      const llmResponse = await this.llmRouter.query(payload.question);
+      const llmResponse = await this.llmRouter.query(payload);
 
-      // If LLM also gave a poor answer but KB had something, prefer KB
-      if (llmResponse.confidence < 0.35 && kbAnswer.length > 40 && !isOOSResponse(kbAnswer)) {
+      // Neu LLM tra ve cau tra loi te nhung KB co noi dung huu ich -> ket hop
+      if (
+        llmResponse.confidence < 0.30 &&
+        kbAnswer.length > 60 &&
+        !isOOSResponse(kbAnswer)
+      ) {
         warnings.push('LLM confidence low; supplementing with knowledge base');
         return {
           ...llmResponse,
-          answer:   `${kbAnswer}\n\n---\n*Additional context from AI:*\n\n${llmResponse.answer}`,
+          answer:   `${kbAnswer}\n\n---\n*Them tu AI (confidence thap):*\n\n${llmResponse.answer}`,
           warnings: [...llmResponse.warnings, ...warnings],
           latencyMs: Date.now() - start,
           source:   'synthesized',
@@ -103,12 +216,14 @@ export class HybridOrchestrator {
     } catch (err) {
       warnings.push(`LLM tier error: ${(err as Error).message}`);
 
-      // Graceful fallback to KB answer regardless of quality
+      // Graceful fallback ve KB
+      const fallbackAnswer = isOOSResponse(kbAnswer) || kbAnswer.length < 20
+        ? '⚠️ Dich vu AI tam thoi khong kha dung va cau hoi nay chua co trong knowledge base. Vui long thu lai sau hoac hoi cau khac.'
+        : kbAnswer;
+
       return {
-        answer:         isOOSResponse(kbAnswer)
-          ? '⚠️ **AI service unavailable.** Please rephrase your question or check back later.'
-          : kbAnswer,
-        confidence:     isOOSResponse(kbAnswer) ? 0 : 0.50,
+        answer:         fallbackAnswer,
+        confidence:     isOOSResponse(kbAnswer) ? 0.10 : 0.45,
         providersTried: ['knowledge_base'],
         providerUsed:   'knowledge_base',
         crossChecked:   false,
@@ -129,16 +244,15 @@ export function getOrchestrator(): HybridOrchestrator {
 }
 
 /**
- * Call this once at app startup to inject the LLM router (with real providers).
- * Safe to call multiple times — only replaces if not already set with router.
+ * Goi ham nay mot lan khi khoi dong ung dung de dua LLM router (voi cac nha cung cap that) vao su dung.
+ * Co the goi nhieu lan an toan — luon thay the instance cu.
  */
 export function initOrchestrator(llmRouter: LLMRouter): void {
   _instance = new HybridOrchestrator(llmRouter);
 }
 
 /**
- * Backward-compatible wrapper: returns plain string, same as old routeQuery.
- * Existing callers can migrate gradually.
+ * Trinh bao boc tuong thich nguoc: tra ve chuoi van ban thuan.
  */
 export async function orchestrateToString(payload: AiQueryPayload): Promise<string> {
   return (await getOrchestrator().orchestrate(payload)).answer;

@@ -1,8 +1,8 @@
 /**
- * Answer Cache
+ * Answer Cache (Bộ nhớ đệm câu trả lời)
  *
- * LRU-style in-memory cache for AI responses.
- * Keyed by a normalized question hash; entries expire after TTL.
+ * Bộ nhớ đệm trong RAM (in-memory) kiểu LRU (Least Recently Used) dành cho phản hồi của AI.
+ * Sử dụng khóa (key) là mã băm (hash) của câu hỏi đã được chuẩn hóa; các mục sẽ hết hạn sau thời gian TTL.
  */
 
 export interface CacheEntry {
@@ -23,31 +23,44 @@ export class AnswerCache {
     this.maxSize = maxSize;
   }
 
-  /** Simple deterministic key: lowercase + collapse whitespace */
-  static makeKey(question: string): string {
-    return question.toLowerCase().replace(/\s+/g, ' ').trim();
+  /** Khóa (key) đơn giản mang tính tất định: viết thường toàn bộ + gộp các khoảng trắng */
+  static makeKey(question: string, context?: string): string {
+    const base = question.toLowerCase().replace(/\s+/g, ' ').trim();
+    if (!context) return base;
+    const ctx = context.toLowerCase().replace(/\s+/g, ' ').trim();
+    if (!ctx) return base;
+    return `${base}::ctx-${AnswerCache.hashContext(ctx)}`;
   }
 
-  get(question: string): CacheEntry | null {
-    const key = AnswerCache.makeKey(question);
+  private static hashContext(text: string): string {
+    let hash = 5381;
+    for (let i = 0; i < text.length; i++) {
+      hash = ((hash << 5) + hash) + text.charCodeAt(i);
+      hash |= 0;
+    }
+    return Math.abs(hash).toString(36);
+  }
+
+  get(question: string, context?: string): CacheEntry | null {
+    const key = AnswerCache.makeKey(question, context);
     const entry = this.store.get(key);
     if (!entry) return null;
 
-    // Expired?
+    // Đã hết hạn?
     if (Date.now() - entry.createdAt > this.ttlMs) {
       this.store.delete(key);
       return null;
     }
-    // Move to end (LRU touch)
+    // Di chuyển xuống cuối (chạm vào LRU - LRU touch)
     this.store.delete(key);
     this.store.set(key, entry);
     return entry;
   }
 
-  set(question: string, entry: Omit<CacheEntry, 'createdAt'>): void {
-    const key = AnswerCache.makeKey(question);
+  set(question: string, entry: Omit<CacheEntry, 'createdAt'>, context?: string): void {
+    const key = AnswerCache.makeKey(question, context);
 
-    // Evict oldest if at capacity
+    // Loại bỏ mục cũ nhất nếu đã đạt giới hạn dung lượng
     if (this.store.size >= this.maxSize) {
       const firstKey = this.store.keys().next().value;
       if (firstKey !== undefined) this.store.delete(firstKey);
@@ -56,7 +69,7 @@ export class AnswerCache {
     this.store.set(key, { ...entry, createdAt: Date.now() });
   }
 
-  /** Remove all expired entries */
+  /** Xóa bỏ tất cả các mục đã hết hạn */
   purgeExpired(): void {
     const now = Date.now();
     for (const [key, entry] of this.store) {

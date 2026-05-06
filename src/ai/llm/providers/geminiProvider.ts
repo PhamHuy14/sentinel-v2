@@ -1,16 +1,15 @@
 /**
- * HuggingFace Inference API Provider Adapter (Adapter cho nhà cung cấp HuggingFace)
+ * Google Gemini Provider Adapter (Adapter cho nhà cung cấp Google Gemini)
  *
- * Gói miễn phí: https://huggingface.co/inference-api
- * Mô hình: meta-llama/Llama-3.1-8B-Instruct (Messages API, miễn phí)
- * Biến môi trường: VITE_HF_API_KEY
+ * Gói miễn phí: https://aistudio.google.com
+ * Mô hình: gemini-2.0-flash (model mới nhất, nhanh, miễn phí)
+ * Biến môi trường: VITE_GEMINI_API_KEY
  *
  * FIX v2.1:
- *  - Chuyển từ Legacy Text-Generation API → Messages API (OpenAI-compatible)
- *    Endpoint mới: /models/{model}/v1/chat/completions
- *  - Đổi model: Mistral-7B-Instruct-v0.3 (đã bị xóa khỏi serverless)
- *    → meta-llama/Llama-3.1-8B-Instruct (vẫn hoạt động trên HF free tier)
- *  - Hỗ trợ đọc VITE_HF_MODELS (comma-separated) để fallback
+ *  - Đổi model mặc định: gemini-1.5-flash → gemini-2.0-flash (mới hơn, tốt hơn)
+ *  - Sửa tên env var: VITE_GEMINI_MODEL → VITE_GEMINI_MODELS (khớp với .env)
+ *  - Hỗ trợ danh sách model fallback (comma-separated)
+ *  - Thử model tiếp theo khi nhận 404 (model deprecated/không tồn tại)
  */
 
 import { ProviderMetricsTracker } from '../metricsTracker.js';
@@ -21,15 +20,14 @@ import {
     ProviderHealth,
 } from '../types';
 
-const HF_BASE_URL = 'https://api-inference.huggingface.co/models';
-const DEFAULT_TIMEOUT = 30_000; // HF cold-starts có thể chậm
+const DEFAULT_TIMEOUT = 20_000;
 
-// FIX: Danh sách model hoạt động trên HF serverless (2025)
+// FIX: Danh sách model fallback Gemini (2025)
 const FALLBACK_MODELS = [
-  'meta-llama/Llama-3.1-8B-Instruct',       // Nhanh, tốt, miễn phí
-  'Qwen/Qwen2.5-7B-Instruct',               // Fallback #1 - chất lượng cao
-  'microsoft/Phi-3-mini-4k-instruct',        // Fallback #2 - nhỏ, nhanh
-  'HuggingFaceH4/zephyr-7b-beta',           // Fallback #3 - ổn định
+  'gemini-2.0-flash',          // Tốt nhất, miễn phí, ĐỀ XUẤT
+  'gemini-2.0-flash-lite',     // Nhỏ hơn, nhanh hơn, fallback #1
+  'gemini-1.5-flash',          // Model cũ hơn, fallback #2
+  'gemini-1.5-flash-latest',   // Alias fallback #3
 ];
 
 type AiFetch = (payload: {
@@ -56,7 +54,7 @@ function shouldParseJson(body: string, contentType: string): boolean {
   return trimmed.startsWith('{') || trimmed.startsWith('[');
 }
 
-async function fetchJson(url: string, payload: { headers: Record<string, string>; body: string }, timeoutMs: number) {
+async function fetchJson(url: string, payload: { headers: Record<string, string>; body: string }, timeoutMs: number, signal?: AbortSignal) {
   const aiFetch = getAiFetch();
   if (aiFetch) {
     const resp = await aiFetch({ url, method: 'POST', headers: payload.headers, body: payload.body, timeoutMs });
@@ -65,6 +63,8 @@ async function fetchJson(url: string, payload: { headers: Record<string, string>
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const onAbort = () => controller.abort();
+  if (signal) signal.addEventListener('abort', onAbort);
   try {
     const res = await fetch(url, {
       method: 'POST',
@@ -76,22 +76,34 @@ async function fetchJson(url: string, payload: { headers: Record<string, string>
     return { ok: res.ok, status: res.status, body: text, contentType: extractContentType({ 'content-type': res.headers.get('content-type') || '' }) };
   } finally {
     clearTimeout(timer);
+    if (signal) signal.removeEventListener('abort', onAbort);
   }
 }
 
-/** Đọc danh sách model từ VITE_HF_MODELS hoặc dùng fallback mặc định */
+interface GeminiResponse {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{ text?: string }>;
+    };
+    finishReason?: string;
+  }>;
+  error?: { message?: string; code?: number };
+}
+
+/** Đọc danh sách model từ VITE_GEMINI_MODELS hoặc dùng fallback mặc định */
 function resolveModelList(): string[] {
   const env = (import.meta as unknown as Record<string, Record<string, string>>).env ?? {};
-  const fromEnv = env.VITE_HF_MODELS ?? env.VITE_HF_MODEL ?? '';
+  // FIX: Hỗ trợ cả VITE_GEMINI_MODELS (mới) và VITE_GEMINI_MODEL (cũ)
+  const fromEnv = env.VITE_GEMINI_MODELS ?? env.VITE_GEMINI_MODEL ?? '';
   if (fromEnv.trim()) {
     return fromEnv.split(',').map(m => m.trim()).filter(Boolean);
   }
   return FALLBACK_MODELS;
 }
 
-export class HuggingFaceProvider implements LLMProvider {
-  readonly id = 'huggingface';
-  readonly label = 'HuggingFace (Llama-3.1 8B)';
+export class GeminiProvider implements LLMProvider {
+  readonly id = 'gemini';
+  readonly label = 'Gemini (2.0 Flash)';
   readonly supportsJsonMode = false;
 
   private readonly apiKey: string;
@@ -100,13 +112,13 @@ export class HuggingFaceProvider implements LLMProvider {
 
   constructor(metrics: ProviderMetricsTracker) {
     const env = (import.meta as unknown as Record<string, Record<string, string>>).env ?? {};
-    this.apiKey = env.VITE_HF_API_KEY ?? '';
+    this.apiKey = env.VITE_GEMINI_API_KEY ?? '';
     this.metrics = metrics;
     this.modelList = resolveModelList();
   }
 
   async generate(prompt: string, options: GenerateOptions = {}): Promise<string> {
-    if (!this.apiKey) throw new ProviderError('auth_error', this.id, 'VITE_HF_API_KEY not set');
+    if (!this.apiKey) throw new ProviderError('auth_error', this.id, 'VITE_GEMINI_API_KEY not set');
 
     const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT;
     const start = Date.now();
@@ -115,39 +127,32 @@ export class HuggingFaceProvider implements LLMProvider {
     let lastError: ProviderError | null = null;
 
     for (const model of this.modelList) {
-      // FIX: Dùng Messages API (OpenAI-compatible) thay vì Legacy text-generation API
-      // Endpoint: /models/{model}/v1/chat/completions
-      const url = `${HF_BASE_URL}/${model}/v1/chat/completions`;
-
       const body = {
-        model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: prompt },
+        system_instruction: { parts: [{ text: systemPrompt }] },
+        contents: [
+          { role: 'user', parts: [{ text: prompt }] },
         ],
-        max_tokens: options.maxTokens ?? 1024,
-        temperature: 0.7,
-        stream: false,
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: options.maxTokens ?? 1024,
+        },
       };
 
       try {
-        const headers = {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.apiKey}`,
-        };
-
-        const res = await fetchJson(url, { headers, body: JSON.stringify(body) }, timeoutMs);
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.apiKey}`;
+        const headers = { 'Content-Type': 'application/json' };
+        const res = await fetchJson(url, { headers, body: JSON.stringify(body) }, timeoutMs, options.signal);
         const latency = Date.now() - start;
 
-        // FIX: 404 = model không hỗ trợ Messages API → thử model tiếp theo
-        if (res.status === 404 || res.status === 400) {
-          lastError = new ProviderError('bad_request', this.id, `Model "${model}" not available via Messages API (HTTP ${res.status})`, res.status);
-          continue;
+        if (res.status === 429) {
+          this.metrics.recordFailure(this.id, latency);
+          throw new ProviderError('rate_limit', this.id, 'Rate limit exceeded', 429);
         }
 
-        if (res.status === 429 || res.status === 503) {
-          this.metrics.recordFailure(this.id, latency);
-          throw new ProviderError('rate_limit', this.id, `HF throttle HTTP ${res.status}`, res.status);
+        // FIX: 404 = model không tồn tại → thử model tiếp theo
+        if (res.status === 404 || res.status === 400) {
+          lastError = new ProviderError('bad_request', this.id, `Model "${model}" not available (HTTP ${res.status})`, res.status);
+          continue;
         }
 
         if (!res.ok) {
@@ -161,7 +166,7 @@ export class HuggingFaceProvider implements LLMProvider {
           throw new ProviderError('bad_request', this.id, 'Non-JSON response', res.status);
         }
 
-        let data: { choices?: { message?: { content?: string } }[] } | null = null;
+        let data: GeminiResponse | null = null;
         try {
           data = res.body ? JSON.parse(res.body) : null;
         } catch {
@@ -169,7 +174,17 @@ export class HuggingFaceProvider implements LLMProvider {
           throw new ProviderError('bad_request', this.id, 'Invalid JSON response', res.status);
         }
 
-        const text = data?.choices?.[0]?.message?.content ?? '';
+        // Kiểm tra lỗi trong response body (Gemini trả về 200 nhưng có error field)
+        if (data?.error) {
+          const code = data.error.code ?? 0;
+          if (code === 404 || code === 400) {
+            lastError = new ProviderError('bad_request', this.id, `Model "${model}" error: ${data.error.message}`, code);
+            continue;
+          }
+          throw new ProviderError('bad_request', this.id, data.error.message ?? 'Gemini API error', code);
+        }
+
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
         this.metrics.recordSuccess(this.id, latency);
         return text.trim();
 
@@ -189,7 +204,7 @@ export class HuggingFaceProvider implements LLMProvider {
     }
 
     this.metrics.recordFailure(this.id, Date.now() - start);
-    throw lastError ?? new ProviderError('bad_request', this.id, 'All HuggingFace models unavailable');
+    throw lastError ?? new ProviderError('bad_request', this.id, 'All Gemini models unavailable');
   }
 
   async health(): Promise<ProviderHealth> {
@@ -197,7 +212,7 @@ export class HuggingFaceProvider implements LLMProvider {
   }
 
   async estimateCostOrQuota(): Promise<number> {
-    // HF serverless free tier: ~1.000 request/ngày
-    return this.apiKey ? 1_000 : 0;
+    // Gemini 2.0 Flash free tier: 15 RPM, 1M TPM
+    return this.apiKey ? 6_000 : 0;
   }
 }

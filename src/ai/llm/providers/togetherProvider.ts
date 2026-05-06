@@ -1,92 +1,194 @@
 /**
- * Together.ai Provider Adapter
+ * Together.ai Provider Adapter (Adapter cho nhà cung cấp Together.ai)
  *
- * Free tier: https://api.together.xyz
- * Model: mistralai/Mixtral-8x7B-Instruct-v0.1
- * Env var: VITE_TOGETHER_API_KEY
+ * Gói miễn phí: https://api.together.xyz
+ * Mô hình: meta-llama/Llama-3.3-70B-Instruct-Turbo-Free (MIỄN PHÍ hoàn toàn)
+ * Biến môi trường: VITE_TOGETHER_API_KEY
+ *
+ * FIX v2.1:
+ *  - Đổi model mặc định: Qwen/Qwen2.5-72B-Instruct-Turbo (tốn credit)
+ *    → meta-llama/Llama-3.3-70B-Instruct-Turbo-Free (hoàn toàn miễn phí)
+ *  - Thêm danh sách model fallback free tier
+ *  - Hỗ trợ đọc VITE_TOGETHER_MODELS từ env
+ *  - Phân biệt lỗi 402 (hết credit) vs 404 (model không tồn tại)
  */
 
-import {
-  GenerateOptions,
-  LLMProvider,
-  ProviderError,
-  ProviderHealth,
-} from '../types.js';
 import { ProviderMetricsTracker } from '../metricsTracker.js';
+import {
+    GenerateOptions,
+    LLMProvider,
+    ProviderError,
+    ProviderHealth,
+} from '../types';
 
 const TOGETHER_API_URL = 'https://api.together.xyz/v1/chat/completions';
-const DEFAULT_MODEL    = 'mistralai/Mixtral-8x7B-Instruct-v0.1';
-const DEFAULT_TIMEOUT  = 15_000;
+const DEFAULT_TIMEOUT  = 20_000;
+
+// FIX: Chỉ dùng model FREE tier (tên có "-Free" hoặc được liệt kê miễn phí)
+const FALLBACK_MODELS = [
+  'meta-llama/Llama-3.3-70B-Instruct-Turbo-Free', // Hoàn toàn miễn phí, ĐỀ XUẤT
+  'meta-llama/Llama-3.2-11B-Vision-Instruct-Turbo', // Fallback #1 (free tier)
+  'meta-llama/Llama-3.1-8B-Instruct-Turbo-Free',   // Fallback #2 (nhanh hơn)
+];
+
+type AiFetch = (payload: {
+  url: string;
+  method?: string;
+  headers?: Record<string, string>;
+  body?: string;
+  timeoutMs?: number;
+}) => Promise<{ ok: boolean; status: number; body: string; headers?: Record<string, string> }>;
+
+function getAiFetch(): AiFetch | null {
+  const bridge = (globalThis as { owaspWorkbench?: { aiFetch?: AiFetch } }).owaspWorkbench;
+  return bridge?.aiFetch ?? null;
+}
+
+function extractContentType(headers?: Record<string, string>): string {
+  return (headers?.['content-type'] || headers?.['Content-Type'] || '').toLowerCase();
+}
+
+function shouldParseJson(body: string, contentType: string): boolean {
+  const trimmed = body.trim();
+  if (!trimmed) return false;
+  if (contentType.includes('application/json')) return true;
+  return trimmed.startsWith('{') || trimmed.startsWith('[');
+}
+
+async function fetchJson(url: string, payload: { headers: Record<string, string>; body: string }, timeoutMs: number) {
+  const aiFetch = getAiFetch();
+  if (aiFetch) {
+    const resp = await aiFetch({ url, method: 'POST', headers: payload.headers, body: payload.body, timeoutMs });
+    return { ok: resp.ok, status: resp.status, body: resp.body || '', contentType: extractContentType(resp.headers) };
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: payload.headers,
+      body: payload.body,
+      signal: controller.signal,
+    });
+    const text = await res.text();
+    return { ok: res.ok, status: res.status, body: text, contentType: extractContentType({ 'content-type': res.headers.get('content-type') || '' }) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Đọc danh sách model từ VITE_TOGETHER_MODELS hoặc dùng fallback mặc định */
+function resolveModelList(): string[] {
+  const env = (import.meta as unknown as Record<string, Record<string, string>>).env ?? {};
+  const fromEnv = env.VITE_TOGETHER_MODELS ?? env.VITE_TOGETHER_MODEL ?? '';
+  if (fromEnv.trim()) {
+    return fromEnv.split(',').map(m => m.trim()).filter(Boolean);
+  }
+  return FALLBACK_MODELS;
+}
 
 export class TogetherProvider implements LLMProvider {
   readonly id = 'together';
-  readonly label = 'Together.ai (Mixtral-8x7B)';
+  readonly label = 'Together.ai (Llama-3.3 70B Free)';
   readonly supportsJsonMode = false;
 
   private readonly apiKey: string;
   private readonly metrics: ProviderMetricsTracker;
+  private readonly modelList: string[];
 
   constructor(metrics: ProviderMetricsTracker) {
-    this.apiKey = (import.meta as unknown as Record<string, Record<string, string>>).env?.VITE_TOGETHER_API_KEY ?? '';
+    const env = (import.meta as unknown as Record<string, Record<string, string>>).env ?? {};
+    this.apiKey = env.VITE_TOGETHER_API_KEY ?? '';
     this.metrics = metrics;
+    this.modelList = resolveModelList();
   }
 
   async generate(prompt: string, options: GenerateOptions = {}): Promise<string> {
     if (!this.apiKey) throw new ProviderError('auth_error', this.id, 'VITE_TOGETHER_API_KEY not set');
 
     const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-
-    const body = {
-      model: DEFAULT_MODEL,
-      messages: [
-        { role: 'system', content: options.systemPrompt ?? 'You are a helpful security assistant.' },
-        { role: 'user',   content: prompt },
-      ],
-      max_tokens: options.maxTokens ?? 512,
-      temperature: 0.7,
-    };
-
     const start = Date.now();
-    try {
-      const res = await fetch(TOGETHER_API_URL, {
-        method: 'POST',
-        headers: {
+
+    let lastError: ProviderError | null = null;
+
+    for (const model of this.modelList) {
+      const body = {
+        model,
+        messages: [
+          { role: 'system', content: options.systemPrompt ?? 'You are a helpful security assistant.' },
+          { role: 'user',   content: prompt },
+        ],
+        max_tokens: options.maxTokens ?? 1024,
+        temperature: 0.7,
+      };
+
+      try {
+        const headers = {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${this.apiKey}`,
-        },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
+        };
+        const res = await fetchJson(TOGETHER_API_URL, { headers, body: JSON.stringify(body) }, timeoutMs);
+        const latency = Date.now() - start;
 
-      clearTimeout(timer);
-      const latency = Date.now() - start;
+        if (res.status === 429) {
+          this.metrics.recordFailure(this.id, latency);
+          throw new ProviderError('rate_limit', this.id, 'Rate limit exceeded', 429);
+        }
 
-      if (res.status === 429) {
-        this.metrics.recordFailure(this.id, latency);
-        throw new ProviderError('rate_limit', this.id, 'Rate limit exceeded', 429);
-      }
-      if (!res.ok) {
-        this.metrics.recordFailure(this.id, latency);
-        const kind = res.status >= 500 ? 'server_error' : 'bad_request';
-        throw new ProviderError(kind, this.id, `HTTP ${res.status}`, res.status);
-      }
+        // FIX: 402 = hết credit. Các model "-Free" sẽ không bao giờ trả về 402.
+        // Nếu vẫn nhận 402 → thử model tiếp theo (model free tier khác)
+        if (res.status === 402) {
+          lastError = new ProviderError('bad_request', this.id, `Model "${model}" requires credits (HTTP 402) — try a Free-tier model`, 402);
+          continue;
+        }
 
-      const data = await res.json() as { choices?: { message?: { content?: string } }[] };
-      const text = data.choices?.[0]?.message?.content ?? '';
-      this.metrics.recordSuccess(this.id, latency);
-      return text.trim();
-    } catch (err) {
-      clearTimeout(timer);
-      if ((err as Error).name === 'AbortError') {
-        this.metrics.recordFailure(this.id, timeoutMs);
-        throw new ProviderError('timeout', this.id, 'Request timed out');
+        // 404 = model không tồn tại → thử tiếp
+        if (res.status === 404 || res.status === 400) {
+          lastError = new ProviderError('bad_request', this.id, `Model "${model}" not available (HTTP ${res.status})`, res.status);
+          continue;
+        }
+
+        if (!res.ok) {
+          this.metrics.recordFailure(this.id, latency);
+          const kind = res.status >= 500 ? 'server_error' : 'bad_request';
+          throw new ProviderError(kind, this.id, `HTTP ${res.status}`, res.status);
+        }
+
+        if (!shouldParseJson(res.body, res.contentType)) {
+          this.metrics.recordFailure(this.id, latency);
+          throw new ProviderError('bad_request', this.id, 'Non-JSON response', res.status);
+        }
+
+        let data: { choices?: { message?: { content?: string } }[] } | null = null;
+        try {
+          data = res.body ? JSON.parse(res.body) : null;
+        } catch {
+          this.metrics.recordFailure(this.id, latency);
+          throw new ProviderError('bad_request', this.id, 'Invalid JSON response', res.status);
+        }
+
+        const text = data?.choices?.[0]?.message?.content ?? '';
+        this.metrics.recordSuccess(this.id, latency);
+        return text.trim();
+
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') {
+          this.metrics.recordFailure(this.id, timeoutMs);
+          throw new ProviderError('timeout', this.id, 'Request timed out');
+        }
+        if (err instanceof ProviderError) {
+          if (err.kind === 'rate_limit' || err.kind === 'auth_error') throw err;
+          lastError = err;
+          continue;
+        }
+        this.metrics.recordFailure(this.id, Date.now() - start);
+        throw new ProviderError('unknown', this.id, String(err));
       }
-      if (err instanceof ProviderError) throw err;
-      this.metrics.recordFailure(this.id, Date.now() - start);
-      throw new ProviderError('unknown', this.id, String(err));
     }
+
+    this.metrics.recordFailure(this.id, Date.now() - start);
+    throw lastError ?? new ProviderError('bad_request', this.id, 'All Together.ai models unavailable');
   }
 
   async health(): Promise<ProviderHealth> {
@@ -94,7 +196,7 @@ export class TogetherProvider implements LLMProvider {
   }
 
   async estimateCostOrQuota(): Promise<number> {
-    // Together free tier: $1 credit → generous for small queries
+    // Together free models: không giới hạn credit (chỉ rate-limited)
     return this.apiKey ? 10_000 : 0;
   }
 }

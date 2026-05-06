@@ -21,6 +21,8 @@ export interface AIChatMessage {
   role: 'user' | 'assistant';
   content: string;
   ts: number;
+  providerUsed?: string;
+  source?: 'knowledge_base' | 'llm' | 'synthesized';
   findingContext?: {
     ruleId: string;
     title: string;
@@ -28,6 +30,10 @@ export interface AIChatMessage {
     owaspCategory: string;
   };
 }
+
+export const HISTORY_TURNS = Number(
+  (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_LLM_HISTORY_TURNS || '20'
+);
 
 interface FaqEntry {
   id: string;
@@ -264,16 +270,16 @@ const TOPIC_MAP: { topic: string; variants: string[] }[] = [
 ];
 
 export function extractTopic(norm: string): string | null {
-  // First try exact / substring match
+  // Đầu tiên thử khớp chính xác / chuỗi con (exact / substring match)
   for (const { topic, variants } of TOPIC_MAP) {
     for (const v of variants) {
       const vNorm = normalize(v);
-      // Avoid `norm.includes('')` => always-true when `normalize(v)` becomes empty
+      // Tránh trường hợp `norm.includes('')` => luôn trả về true khi `normalize(v)` trở thành rỗng
       if (!vNorm) continue;
       if (norm.includes(vNorm)) return topic;
     }
   }
-  // Fallback: fuzzy match on keywords
+  // Dự phòng (Fallback): so khớp mờ (fuzzy match) trên các từ khóa
   const words = norm.split(' ').filter(w => w.length > 3);
   for (const { topic, variants } of TOPIC_MAP) {
     for (const v of variants) {
@@ -308,7 +314,7 @@ const TOPIC_TO_FAQ: Record<string, string> = {
   how_to_use: 'faq_how_to_use', oauth: 'faq_auth',
 };
 
-// ── Score FAQ entries (enhanced with fuzzy + context bonus) ───────────────────
+// ── Tính điểm các mục FAQ (nâng cao với so khớp mờ + điểm thưởng ngữ cảnh) ───────────────────
 function scoreFaq(
   entry: FaqEntry,
   normQuery: string,
@@ -331,7 +337,7 @@ function scoreFaq(
     const hits = kwWords.filter(w => w.length > 2 && normQuery.includes(w)).length;
     if (hits > 0) score += hits * 1.5;
 
-    // Fuzzy bonus for single-word keywords
+    // Thưởng điểm so khớp mờ cho các từ khóa đơn (single-word)
     if (kwWords.length === 1 && kwWords[0].length > 4) {
       for (const qw of keywords) {
         if (fuzzyMatch(qw, kwWords[0])) score += 1.2;
@@ -339,12 +345,12 @@ function scoreFaq(
     }
   }
 
-  // Question word overlap
+  // Trùng lặp từ ngữ câu hỏi
   const normQ = normalize(entry.question);
   const qWords = normQ.split(' ').filter(w => w.length > 3 && !STOP_WORDS.has(w));
   for (const w of qWords) { if (keywords.includes(w)) score += 1.2; }
 
-  // Prefix match
+  // Khớp phần tiền tố (Prefix match)
   for (const kw of keywords) {
     for (const ekw of entry.keywords) {
       const normEkw = normalize(ekw);
@@ -352,7 +358,7 @@ function scoreFaq(
     }
   }
 
-  // Context topic bonus: if the entry matches the current conversation topic
+  // Thưởng điểm chủ đề ngữ cảnh: nếu mục khớp với chủ đề cuộc trò chuyện hiện tại
   if (contextTopic && TOPIC_TO_FAQ[contextTopic] === entry.id) {
     score += 2;
   }
@@ -360,7 +366,7 @@ function scoreFaq(
   return score;
 }
 
-// ── OWASP categories ──────────────────────────────────────────────────────────
+// ── Danh mục OWASP ──────────────────────────────────────────────────────────
 const OWASP_QUICK: Record<string, string> = {
   'a01': `## A01 — Broken Access Control\n\nĐây là lỗ hổng phổ biến nhất theo OWASP 2021–2025. Xảy ra khi ứng dụng không kiểm tra đúng quyền truy cập.\n\n**Biểu hiện thường gặp:**\n- IDOR: thay ID trên URL để xem dữ liệu người khác\n- Bỏ qua kiểm tra xác thực ở API endpoint\n- Thiếu CSRF token trên form nhạy cảm\n- Privilege escalation: user thường truy cập tính năng admin\n\n**Hướng khắc phục:**\n- Luôn kiểm tra quyền ở phía server cho mọi request — không tin client\n- Dùng UUID thay sequential ID (1, 2, 3...)\n- Implement RBAC (Role-Based Access Control) nhất quán\n- Log và alert mọi access control failure\n\n*Hỏi tôi: "IDOR là gì?", "CSRF là gì?" để tìm hiểu từng lỗ hổng cụ thể.*`,
   'a02': `## A02 — Cryptographic Failures\n\nXảy ra khi dữ liệu nhạy cảm được truyền hoặc lưu mà không có mã hóa đúng cách.\n\n**Biểu hiện thường gặp:**\n- Thiếu cookie flags: \`HttpOnly\`, \`Secure\`, \`SameSite\`\n- Thiếu security headers: CSP, HSTS, X-Content-Type-Options\n- Lưu mật khẩu bằng MD5/SHA1 hoặc plain text\n- Dùng thuật toán mã hóa yếu: DES, RC4, MD5\n- Truyền dữ liệu nhạy cảm qua HTTP thay HTTPS\n\n**Hướng khắc phục:**\n- Bắt buộc HTTPS với HSTS header\n- Dùng bcrypt/Argon2 cho password hashing — không bao giờ MD5\n- Thiết lập đúng cookie flags cho session\n- Dùng TLS 1.2+ và cipher suite mạnh\n\n*Hỏi tôi: "Security Headers là gì?", "Cách lưu mật khẩu an toàn?"*`,
@@ -374,7 +380,7 @@ const OWASP_QUICK: Record<string, string> = {
   'a10': `## A10 — SSRF (Server-Side Request Forgery)\n\nKẻ tấn công lừa server gửi request đến URL tùy ý, thường là internal network hoặc cloud metadata.\n\n**Attack scenarios phổ biến:**\n- AWS metadata: \`http://169.254.169.254/latest/meta-data/\` → lấy IAM credentials\n- Internal service: \`http://192.168.1.1/admin\` → bypass firewall\n- Port scan internal network\n- Lợi dụng webhook để exfiltrate data\n\n**Hướng khắc phục:**\n- Validate và whitelist URL scheme/host\n- Block private IP ranges (10.x, 172.16.x, 192.168.x, 169.254.x)\n- Resolve hostname và verify IP trước khi request\n- Tắt HTTP redirect hoặc limit redirect\n- Dùng thư viện SSRF-safe\n\n*Hỏi tôi "SSRF là gì?" để xem ví dụ cụ thể.*`,
 };
 
-// ── Finding-specific answers ──────────────────────────────────────────────────
+// ── Trả lời riêng cho từng loại Finding (Finding-specific answers) ──────────────────────────────────────────────────
 interface FindingContext {
   ruleId?: string; title?: string; severity?: string;
   owaspCategory?: string; remediation?: string; evidence?: string[];
@@ -396,7 +402,7 @@ function severityLabel(sev: string): string {
   return ({ critical: '🔴 Critical', high: '🟠 High', medium: '🟡 Medium', low: '🟢 Low' } as Record<string, string>)[sev] || sev;
 }
 
-// ── Security domain checker ───────────────────────────────────────────────────
+// ── Trình kiểm tra lĩnh vực bảo mật (Security domain checker) ───────────────────────────────────────────────────
 const SECURITY_MUST_TERMS = [
   'bao mat', 'lo hong', 'tan cong', 'khai thac', 'xac thuc', 'ma hoa',
   'quet', 'scan', 'finding', 'severity', 'owasp', 'pentest', 'kiem thu',
@@ -419,7 +425,7 @@ function isSecurityRelated(norm: string): boolean {
   return SECURITY_MUST_TERMS.some(t => norm.includes(t));
 }
 
-// ── Out-of-scope classifier ───────────────────────────────────────────────────
+// ── Trình phân loại các câu hỏi ngoài phạm vi (Out-of-scope classifier) ───────────────────────────────────────────────────
 const OUT_OF_SCOPE_TOPICS = [
   'ban la ai', 'may la ai', 'ai day', 'ban ten gi', 'ten cua ban',
   'thoi tiet', 'weather', 'bong da', 'football', 'soccer', 'the thao',
@@ -441,7 +447,7 @@ function isPersonNameQuery(norm: string): boolean {
   return /^[\w\s]{2,20}\s+la\s+ai[\s?]*$/.test(norm.trim());
 }
 
-// ── Smart suggestions (topic-aware) ──────────────────────────────────────────
+// ── Gợi ý thông minh (nhận biết chủ đề) ──────────────────────────────────────────
 const TOPIC_SUGGESTIONS: Record<string, string[]> = {
   sql_injection:    ['XSS là gì?', 'SSTI là gì và cách fix?', 'Command Injection là gì?'],
   xss:             ['CSRF là gì?', 'Security Headers là gì?', 'Content Security Policy là gì?'],
@@ -478,11 +484,11 @@ const THANKS_RESPONSES = [
   '👍 Hy vọng thông tin hữu ích! Có câu hỏi nào khác về bảo mật không?',
 ];
 
-// Track last used variants to avoid repetition
+// Theo dõi các biến thể đã dùng lần cuối để tránh lặp lại
 let lastGreetingIdx = -1;
 let lastThanksIdx = -1;
 
-// ── Out-of-scope responses ────────────────────────────────────────────────────
+// ── Câu trả lời cho các nội dung ngoài phạm vi ────────────────────────────────────────────────────
 function buildOOSResponse(norm: string, topic: string | null, isPersonQuery = false): string {
   const suggestions = generateSmartSuggestions(norm, topic);
   const suggestionText = suggestions.map(s => `- ${s}`).join('\n');
@@ -496,7 +502,7 @@ function buildOOSResponse(norm: string, topic: string | null, isPersonQuery = fa
   return `## Ngoài phạm vi hỗ trợ\n\nTôi là AI assistant **chuyên về bảo mật web** — câu hỏi này nằm ngoài lĩnh vực của tôi.\n\n**Tôi có thể giúp bạn về:**\n- Các lỗ hổng bảo mật web theo chuẩn OWASP\n- Hướng dẫn sử dụng SENTINEL để scan và phân tích\n- Cách khắc phục từng loại lỗ hổng cụ thể\n\n**Thử hỏi:**\n${suggestionText}\n\n*Nhấn 💡 để xem toàn bộ câu hỏi được hỗ trợ.*`;
 }
 
-// ── Follow-up detection ───────────────────────────────────────────────────────
+// ── Phát hiện câu hỏi nối tiếp (Follow-up detection) ───────────────────────────────────────────────────────
 const FOLLOWUP_CONTINUATION_WORDS = [
   'cach fix', 'vi du', 'example', 'cho xem vi du', 'chi tiet hon',
   'giai thich them', 'noi them', 'ro hon', 'lam sao', 'hau qua', 'impact',
@@ -513,7 +519,7 @@ function isLikelyFollowUp(norm: string, hasClearTopic: boolean, hasClearIntent: 
   return wordCount <= 6 && isSecurityRelated(norm);
 }
 
-// ── OWASP named category map ──────────────────────────────────────────────────
+// ── Bản đồ tên các danh mục OWASP ──────────────────────────────────────────────────
 const OWASP_NAME_MAP: Record<string, string> = {
   'broken access control': 'a01', 'broken access': 'a01', 'access control': 'a01',
   'cryptographic failures': 'a02', 'cryptographic': 'a02', 'ma hoa': 'a02',
@@ -526,7 +532,7 @@ const OWASP_NAME_MAP: Record<string, string> = {
   'server side request': 'a10',
 };
 
-// ── Sub-intent branching: modifier for answer based on intent ─────────────────
+// ── Phân nhánh theo ý định phụ: sửa đổi câu trả lời dựa trên ý định ─────────────────
 function applyIntentModifier(answer: string, intent: Intent, topic: string | null): string {
   if (intent === 'impact') {
     return `${answer}\n\n---\n⚠️ *Muốn biết thêm hậu quả thực tế? Hỏi: "Tấn công ${topic?.replace(/_/g, ' ')} có thể gây ra gì?"*`;
@@ -543,27 +549,29 @@ function applyIntentModifier(answer: string, intent: Intent, topic: string | nul
   return answer;
 }
 
-// ── Dedup guard: prevents same answer twice in a row ─────────────────────────
+// ── Bảo vệ chống trùng lặp (Dedup guard): ngăn trả cùng một câu trả lời 2 lần liên tiếp ─────────────────────────
 function isDuplicateAnswer(answer: string, lastAnswer?: string): boolean {
   if (!lastAnswer) return false;
-  // Compare first 100 chars (heading + intro)
+  // So sánh 100 ký tự đầu tiên (tiêu đề + phần mở đầu)
   const sig1 = answer.slice(0, 100).replace(/\s+/g, ' ').trim();
   const sig2 = lastAnswer.slice(0, 100).replace(/\s+/g, ' ').trim();
   return sig1 === sig2;
 }
 
-// ── Main router ───────────────────────────────────────────────────────────────
+// ── Router chính ───────────────────────────────────────────────────────────────
 export interface AiQueryPayload {
   question: string;
   findingContext?: FindingContext;
   lastAssistantMessage?: string;
   conversationHistory?: { role: 'user' | 'assistant'; content: string }[];
+  signal?: AbortSignal;
+  onToken?: (token: string) => void;
 }
 
 export function routeQuery(payload: AiQueryPayload): string {
   const { question, findingContext, lastAssistantMessage, conversationHistory } = payload;
 
-  // Apply typo corrections before normalizing
+  // Áp dụng sửa lỗi chính tả trước khi chuẩn hóa
   const normRaw = normalize(question);
   const normQ = applyTypoCorrections(normRaw);
 
@@ -572,7 +580,7 @@ export function routeQuery(payload: AiQueryPayload): string {
   const topic = extractTopic(normQ);
   const keywords = extractKeywords(normQ);
 
-  // Extract context topic from conversation history (last 2 assistant msgs)
+  // Trích xuất chủ đề ngữ cảnh từ lịch sử trò chuyện (2 tin nhắn gần nhất của trợ lý)
   let contextTopic: string | null = null;
   if (conversationHistory && conversationHistory.length > 0) {
     const recentAssistant = conversationHistory
@@ -585,37 +593,44 @@ export function routeQuery(payload: AiQueryPayload): string {
     }
   }
 
-  // 1. Greeting
+  // BỎ QUA KNOWLEDGE BASE NẾU YÊU CẦU "CHI TIẾT"
+  // Nếu người dùng yêu cầu giải thích chi tiết, ta trả về chuỗi rỗng
+  // để HybridOrchestrator tự động chuyển câu hỏi sang LLM (trả lời đầy đủ, tự nhiên, bớt máy móc)
+  if (intent === 'explain_more' || secondaryIntent === 'explain_more' || normQ.includes('chi tiet')) {
+    return "";
+  }
+
+  // 1. Chào hỏi (Greeting)
   if (intent === 'greeting') {
     const idx = (lastGreetingIdx + 1) % GREETING_VARIANTS.length;
     lastGreetingIdx = idx;
     return GREETING_VARIANTS[idx];
   }
 
-  // 2. Thanks
+  // 2. Cảm ơn (Thanks)
   if (intent === 'thanks') {
     const idx = (lastThanksIdx + 1) % THANKS_RESPONSES.length;
     lastThanksIdx = idx;
     return THANKS_RESPONSES[idx];
   }
 
-  // 3. List topics
+  // 3. Liệt kê các chủ đề (List topics)
   if (intent === 'list_topics') {
     return `## Tôi hỗ trợ những chủ đề nào?\n\n**🔴 Lỗ hổng bảo mật (OWASP Top 10)**\nSQL Injection, XSS, CSRF, IDOR, CORS, JWT, SSRF, SSTI, Path Traversal, Clickjacking, Open Redirect, Command Injection, XXE, BOLA, Rate Limiting, Password Security, API Security, Session Management, Subresource Integrity, Docker Security, Sensitive Data Exposure\n\n**🛡️ Công cụ SENTINEL**\nURL Scan, Project Scan, Crawl Depth, Request Budget, Authentication, Export Báo cáo, Lịch sử Scan, Checklist, Collector, False Positive, Risk Score\n\n**📋 OWASP A01–A10**\nGiải thích chi tiết từng category với ví dụ thực tế\n\n**✅ Best Practices**\nHardcoded Secrets, Env Config, Security Headers, Dependency Management\n\n*Nhấn 💡 để xem danh sách câu hỏi gợi ý hoặc gõ tên chủ đề bất kỳ.*`;
   }
 
-  // 4. Personal identity
+  // 4. Định danh cá nhân (Personal identity)
   if (intent === 'personal_question') {
     return `## Tôi là SENTINEL AI Assistant\n\nTôi là trợ lý bảo mật tích hợp trong **SENTINEL v2**, hoạt động **hoàn toàn offline** và được xây dựng để:\n\n- Giải thích các lỗ hổng bảo mật theo chuẩn OWASP\n- Hướng dẫn sử dụng SENTINEL từng bước\n- Phân tích findings từ kết quả scan\n- Đề xuất cách khắc phục cụ thể\n\n**Tôi không phải con người và không kết nối internet.** Knowledge base của tôi được cập nhật theo OWASP Top 10 2021–2025.\n\nHỏi tôi về bảo mật web! 💡`;
   }
 
-  // 5. Person name query "[X] là ai?"
+  // 5. Câu hỏi về tên người "[X] là ai?"
   if (isPersonNameQuery(normQ)) return buildOOSResponse(normQ, topic, true);
 
-  // 6. Explicit out-of-scope
+  // 6. Nằm ngoài phạm vi rõ ràng (Explicit out-of-scope)
   if (isOutOfScope(normQ)) return buildOOSResponse(normQ, topic, false);
 
-  // 7. Finding context
+  // 7. Ngữ cảnh Finding (Finding context)
   if (findingContext) {
     const isVagueOnFinding = normQ.split(' ').length <= 5 && (
       normQ.includes('nay') || normQ.includes('gi') || normQ.includes('sao') ||
@@ -624,7 +639,7 @@ export function routeQuery(payload: AiQueryPayload): string {
     if (isVagueOnFinding || normQ.includes('finding')) return buildFindingAnswer(findingContext);
   }
 
-  // 8. OWASP category A01..A10 (numeric)
+  // 8. Danh mục OWASP A01..A10 (bằng số)
   if (intent === 'owasp_category') {
     const match = normQ.match(/\ba0?([1-9]|10)\b/);
     if (match) {
@@ -633,20 +648,20 @@ export function routeQuery(payload: AiQueryPayload): string {
     }
   }
 
-  // 9. Named OWASP category
+  // 9. Danh mục OWASP theo tên
   for (const [phrase, key] of Object.entries(OWASP_NAME_MAP)) {
     if (normQ.includes(normalize(phrase)) && OWASP_QUICK[key]) {
       return `${OWASP_QUICK[key]}\n\n---\n*Hỏi về lỗ hổng cụ thể để nhận hướng dẫn chi tiết hơn.*`;
     }
   }
 
-  // 10. Topic-based direct lookup
+  // 10. Tra cứu trực tiếp theo chủ đề
   if (topic) {
     let directFaqId: string | undefined = TOPIC_TO_FAQ[topic];
 
-    // Fix common "topic bucket too broad" cases
-    // - `findings` topic currently matches many questions (severity/false positive/collector),
-    //   but we must route them to the specific FAQ entry.
+    // Sửa các trường hợp "chủ đề quá rộng" thường gặp
+    // - Chủ đề `findings` hiện đang khớp với nhiều câu hỏi (severity/false positive/collector),
+    //   nhưng chúng ta phải chuyển hướng chúng đến mục FAQ cụ thể.
     if (topic === 'findings') {
       if (normQ.includes('false positive')) directFaqId = 'faq_false_positive';
       else if (normQ.includes('collector')) directFaqId = 'faq_collector';
@@ -654,8 +669,8 @@ export function routeQuery(payload: AiQueryPayload): string {
       else if (normQ.includes('severity') || /\b(critical|high|medium|low)\b/.test(normQ)) directFaqId = 'faq_severity';
     }
 
-    // - `auth` topic variant includes 2fa/mfa keywords, but TOPIC_TO_FAQ maps it to faq_auth.
-    //   Override to return the dedicated 2FA/MFA entry.
+    // - Biến thể chủ đề `auth` bao gồm các từ khóa 2fa/mfa, nhưng TOPIC_TO_FAQ ánh xạ nó tới faq_auth.
+    //   Ghi đè để trả về mục dành riêng cho 2FA/MFA.
     if (topic === 'auth' && /\b(2fa|mfa|two factor|multi factor|multi-factor|two-factor)\b/.test(normQ)) {
       directFaqId = 'faq_2fa_mfa';
     }
@@ -665,7 +680,7 @@ export function routeQuery(payload: AiQueryPayload): string {
       if (directEntry) {
       let answer = directEntry.answer;
 
-      // Dedup: if same answer was given last time, enrich it
+      // Dedup: nếu đã đưa ra cùng câu trả lời vào lần trước, hãy làm phong phú thêm nó
       if (isDuplicateAnswer(answer, lastAssistantMessage)) {
         const related = FAQ.find(e =>
           e.id !== directEntry.id &&
@@ -676,7 +691,7 @@ export function routeQuery(payload: AiQueryPayload): string {
         }
       }
 
-      // Apply intent modifier for compound intents
+      // Áp dụng bộ điều chỉnh ý định cho các ý định kép
       const effectiveIntent = secondaryIntent || intent;
       if (['how_to_fix', 'impact', 'prevent', 'example'].includes(effectiveIntent)) {
         answer = applyIntentModifier(answer, effectiveIntent, topic);
@@ -684,7 +699,7 @@ export function routeQuery(payload: AiQueryPayload): string {
         answer += '\n\n---\n*Cần ví dụ code cho stack cụ thể? Hãy mô tả thêm (Node.js, Python, Java...).*';
       }
 
-      // Related suggestion (avoid same)
+      // Gợi ý liên quan (tránh trùng lặp)
       const suggestions = generateSmartSuggestions(normQ, topic);
       if (suggestions.length > 0) {
         const pick = suggestions[Math.floor(Math.random() * suggestions.length)];
@@ -697,14 +712,14 @@ export function routeQuery(payload: AiQueryPayload): string {
     }
   }
 
-  // 11. Check security relevance
+  // 11. Kiểm tra mức độ liên quan đến bảo mật
   const hasClearTopic = topic !== null;
   const hasClearIntent = intent !== 'general';
   if (!isSecurityRelated(normQ) && !hasClearTopic && !hasClearIntent) {
     return buildOOSResponse(normQ, topic, isPersonNameQuery(normQ));
   }
 
-  // 12. Follow-up resolution — with context
+  // 12. Xử lý câu hỏi nối tiếp (Follow-up) — kèm theo ngữ cảnh
   if (lastAssistantMessage && isLikelyFollowUp(normQ, hasClearTopic, hasClearIntent)) {
     const ctxNorm = normalize(lastAssistantMessage.slice(0, 800));
     const combinedKeywords = extractKeywords(`${normQ} ${ctxNorm.slice(0, 400)}`);
@@ -718,14 +733,14 @@ export function routeQuery(payload: AiQueryPayload): string {
       if (!isDuplicateAnswer(best.answer, lastAssistantMessage)) {
         return best.answer + `\n\n---\n*Tiếp tục chủ đề: **${best.question}***`;
       }
-      // If duplicate, try next
+      // Nếu trùng lặp, thử câu tiếp theo
       if (combinedScored.length > 1) {
         return combinedScored[1].entry.answer + `\n\n---\n*Chủ đề liên quan: **${combinedScored[1].entry.question}***`;
       }
     }
   }
 
-  // 13. Full FAQ scoring with context bonus
+  // 13. Tính điểm toàn bộ FAQ với điểm thưởng ngữ cảnh
   const scored = FAQ
     .map(entry => ({ entry, score: scoreFaq(entry, normQ, keywords, contextTopic) }))
     .filter(x => x.score > 0)
@@ -734,7 +749,7 @@ export function routeQuery(payload: AiQueryPayload): string {
   if (scored.length > 0 && scored[0].score >= 3) {
     let answer = scored[0].entry.answer;
 
-    // Dedup: pick next best if top is duplicate
+    // Dedup: chọn câu tốt tiếp theo nếu câu đầu tiên bị trùng lặp
     if (isDuplicateAnswer(answer, lastAssistantMessage) && scored.length > 1 && scored[1].score >= 2) {
       answer = scored[1].entry.answer;
     }
@@ -748,26 +763,26 @@ export function routeQuery(payload: AiQueryPayload): string {
     return answer;
   }
 
-  // 14. Finding context fallback
+  // 14. Dự phòng bằng ngữ cảnh Finding
   if (findingContext) return buildFindingAnswer(findingContext);
 
-  // 15. Low confidence — only if security-related
+  // 15. Độ tin cậy thấp — chỉ hiển thị nếu liên quan đến bảo mật
   if (isSecurityRelated(normQ) && scored.length > 0 && scored[0].score >= 1.5) {
     if (!isDuplicateAnswer(scored[0].entry.answer, lastAssistantMessage)) {
       return `## Có thể bạn muốn hỏi về...\n\n${scored[0].entry.answer}\n\n---\n*Nếu đây không phải câu trả lời bạn cần, hãy thử diễn đạt lại hoặc nhấn 💡.*`;
     }
   }
 
-  // 16. Final fallback
+  // 16. Dự phòng cuối cùng (Final fallback)
   return buildOOSResponse(normQ, topic, isPersonNameQuery(normQ));
 }
 
-// ── Generate message ID ───────────────────────────────────────────────────────
+// ── Tạo Message ID ───────────────────────────────────────────────────────
 export function genMsgId(): string {
   return `msg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
-// ── Rotating placeholder hints ───────────────────────────────────────────────
+// ── Xoay vòng gợi ý trong ô nhập liệu (Rotating placeholder hints) ───────────────────────────────────────────────
 export const INPUT_PLACEHOLDER_HINTS = [
   'SQL Injection là gì và cách fix?',
   'XSS là gì?',

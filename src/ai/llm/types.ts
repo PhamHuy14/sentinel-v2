@@ -1,65 +1,71 @@
 /**
- * LLM Provider Interface & Shared Types
+ * Giao dien nha cung cap LLM & Cac kieu du lieu dung chung
  *
- * Defines the contract every provider adapter must implement,
- * plus the canonical response object returned to callers.
+ * Dinh nghia hop dong ma moi adapter cua nha cung cap phai trien khai,
+ * cung voi doi tuong phan hoi chuan tra ve cho nguoi goi.
  */
 
-// ── Provider health snapshot ───────────────────────────────────────────────────
+// ── Trang thai suc khoe nha cung cap ───────────────────────────────────────────────────
 export interface ProviderHealth {
-  /** 0–1 score; 1 = fully healthy */
+  /** Diem so 0–1; 1 = hoan toan khoe manh */
   score: number;
-  /** Estimated remaining quota (arbitrary units, provider-specific) */
+  /** Uoc luong han muc con lai (don vi tuy y, tuy thuoc vao nha cung cap) */
   remainingQuota: number;
-  /** Average latency in ms from recent calls */
+  /** Do tre trung binh tinh bang ms tu cac lenh goi gan day */
   avgLatencyMs: number;
-  /** Error rate in last N calls (0–1) */
+  /** Ty le loi trong N lenh goi gan nhat (0–1) */
   recentErrorRate: number;
-  /** Whether the circuit-breaker is open */
+  /** Trang thai ngat mach (circuit-breaker) co dang mo hay khong */
   circuitOpen: boolean;
 }
 
-// ── Provider abstraction ───────────────────────────────────────────────────────
+// ── Truu tuong hoa nha cung cap ───────────────────────────────────────────────────────
 export interface LLMProvider {
-  /** Unique identifier, e.g. "groq", "together", "huggingface" */
+  /** Dinh danh duy nhat, vi du: "groq", "together", "huggingface" */
   readonly id: string;
-  /** Human-readable label */
+  /** Nhan hien thi cho nguoi dung doc */
   readonly label: string;
-  /** Whether this provider supports native JSON-mode output */
+  /** Nha cung cap nay co ho tro dau ra dang JSON goc hay khong */
   readonly supportsJsonMode: boolean;
 
   /**
-   * Generate a completion for `prompt`.
-   * @param prompt - The sanitized prompt string.
-   * @param options - Optional overrides (maxTokens, systemPrompt, jsonMode).
-   * @returns The raw text response.
-   * @throws {ProviderError} on API-level errors.
+   * Tao phan hoi cho `prompt`.
+   * @param prompt - Chuoi prompt da duoc lam sach.
+   * @param options - Cac tuy chon ghi de (maxTokens, systemPrompt, jsonMode).
+   * @returns Phan hoi dang van ban tho.
+   * @throws {ProviderError} khi co loi cap API.
    */
   generate(prompt: string, options?: GenerateOptions): Promise<string>;
 
   /**
-   * Quick liveness / quota check.
-   * Should be lightweight — ideally a cheap metadata call or cached.
+   * Kiem tra nhanh trang thai hoat dong / han muc.
+   * Nen nhe nhang — ly tuong nhat la mot lenh goi sieu du lieu re hoac duoc cache.
    */
   health(): Promise<ProviderHealth>;
 
   /**
-   * Returns an estimate of remaining quota.
-   * May return Infinity when quota is unknown or unlimited.
+   * Tra ve uoc luong han muc con lai.
+   * Co the tra ve Infinity khi han muc khong xac dinh hoac khong gioi han.
    */
   estimateCostOrQuota(): Promise<number>;
 }
 
-// ── Generate options ───────────────────────────────────────────────────────────
+// ── Tuy chon tao phan hoi ───────────────────────────────────────────────────────────
 export interface GenerateOptions {
   maxTokens?: number;
   systemPrompt?: string;
   jsonMode?: boolean;
-  /** Request-level timeout override in ms */
+  /** Ghi de thoi gian cho o cap do request tinh bang ms */
   timeoutMs?: number;
+  /** AbortSignal de huy request dang chay */
+  signal?: AbortSignal;
+  /** Streaming token callback (neu nha cung cap ho tro) */
+  onToken?: (token: string) => void;
+  /** Bat streaming khi co onToken */
+  stream?: boolean;
 }
 
-// ── Provider errors ───────────────────────────────────────────────────────────
+// ── Loi tu nha cung cap ───────────────────────────────────────────────────────────
 export type ProviderErrorKind =
   | 'rate_limit'      // 429
   | 'server_error'    // 5xx
@@ -80,36 +86,36 @@ export class ProviderError extends Error {
   }
 }
 
-// ── Canonical AI response ─────────────────────────────────────────────────────
+// ── Phan hoi AI chuan muc ─────────────────────────────────────────────────────
 export interface AiResponse {
-  /** The final answer to return to the user */
+  /** Cau tra loi cuoi cung tra ve cho nguoi dung */
   answer: string;
-  /** Confidence score 0–1 */
+  /** Diem do tin cay tu 0–1 */
   confidence: number;
-  /** All providers that were attempted */
+  /** Tat ca cac nha cung cap da duoc thu */
   providersTried: string[];
-  /** The provider whose answer was ultimately used */
+  /** Nha cung cap co cau tra loi cuoi cung duoc su dung */
   providerUsed: string;
-  /** Whether cross-checking was performed */
+  /** Da thuc hien kiem tra cheo hay chua */
   crossChecked: boolean;
-  /** Non-fatal warnings (e.g. "provider X timed out, used fallback") */
+  /** Cac canh bao khong nghiem trong (vi du: "nha cung cap X qua han, dung du phong") */
   warnings: string[];
-  /** Total wall-clock latency in ms */
+  /** Tong do tre thuc te tinh bang ms */
   latencyMs: number;
-  /** Source layer: 'knowledge_base' | 'llm' | 'synthesized' */
+  /** Lop nguon cung cap: 'knowledge_base' | 'llm' | 'synthesized' */
   source: 'knowledge_base' | 'llm' | 'synthesized';
 }
 
-// ── Router config ─────────────────────────────────────────────────────────────
+// ── Cau hinh bo dinh tuyen ─────────────────────────────────────────────────────────────
 export interface RouterConfig {
   /**
-   * IDs of providers in priority order.
-   * The router will try higher-priority providers first,
-   * subject to health scoring.
+   * ID cua cac nha cung cap theo thu tu uu tien.
+   * Bo dinh tuyen se thu cac nha cung cap co muc uu tien cao hon truoc,
+   * tuy thuoc vao diem suc khoe.
    */
   providerPriority: string[];
 
-  /** Weights used in provider selection score (0–1 range each) */
+  /** Trong so dung trong diem lua chon nha cung cap (moi cai trong khoang 0–1) */
   selectionWeights: {
     health: number;
     quota: number;
@@ -117,66 +123,71 @@ export interface RouterConfig {
     errorRate: number;
   };
 
-  /** Max time for a single provider call, ms */
+  /** Thoi gian toi da cho mot lenh goi nha cung cap, ms */
   timeoutMs: number;
 
-  /** How many times to retry a failing call before next provider */
+  /** So lan thu lai mot lenh goi that bai truoc khi chuyen sang nha cung cap tiep theo */
   maxRetries: number;
 
-  /** Base delay for exponential back-off, ms */
+  /** Do tre co so cho thuat toan back-off cap so nhan, ms */
   retryBaseDelayMs: number;
 
-  /** Maximum back-off delay cap, ms */
+  /** Gioi han do tre back-off toi da, ms */
   retryMaxDelayMs: number;
 
   /**
-   * Number of consecutive failures that trip the circuit breaker.
-   * Once open, the provider is skipped for `circuitResetMs`.
+   * So lan that bai lien tiep de ngat mach (circuit breaker).
+   * Khi bi ngat, nha cung cap se bi bo qua trong `circuitResetMs`.
    */
   circuitBreakerThreshold: number;
 
-  /** How long an open circuit stays open before being retried, ms */
+  /** Thoi gian duy tri trang thai ngat mach truoc khi thu lai, ms */
   circuitResetMs: number;
 
-  /** TTL for cached answers, ms */
+  /** Thoi gian song (TTL) cho cac cau tra loi duoc cache, ms */
   cacheTtlMs: number;
 
-  /** Maximum cache entries */
+  /** So luong muc toi da trong cache */
   cacheMaxSize: number;
 
   /**
-   * Minimum confidence score from a single provider to skip cross-check.
-   * Below this threshold a second provider is also queried.
+   * Diem tin cay toi thieu tu mot nha cung cap de bo qua kiem tra cheo.
+   * Duoi nguong nay, nha cung cap thu hai cung se duoc truy van.
    */
   crossCheckThreshold: number;
 
   /**
-   * Whether cross-checking is enabled at all.
-   * Can be toggled per-environment via env var.
+   * Cho phep hoac vo hieu hoa kiem tra cheo.
+   * Co the duoc bat/tat theo moi truong thong qua bien moi truong.
    */
   crossCheckEnabled: boolean;
 
-  /** Max tokens sent to provider (input guard) */
+  /** So luong token toi da gui den nha cung cap (bao ve dau vao) */
   maxInputTokens: number;
 
-  /** Max tokens requested from provider (output guard) */
+  /** So luong token toi da yeu cau tu nha cung cap (bao ve dau ra) */
   maxOutputTokens: number;
 }
 
-// ── Default config ─────────────────────────────────────────────────────────────
+// ── Cau hinh mac dinh ─────────────────────────────────────────────────────────────
+// NANG CAP: maxOutputTokens tang tu 512 -> 2048 de co cau tra loi day du hon
+// NANG CAP: maxInputTokens tang tu 1500 -> 2500 de gui nhieu ngu canh hon
+// NANG CAP: timeoutMs tang tu 12s -> 20s de nha cung cap co du thoi gian tra loi
+// NANG CAP: crossCheckThreshold giam tu 0.65 -> 0.55 de kich hoat cross-check it thuong xuyen hon (tiet kiem quota)
+// NANG CAP: circuitBreakerThreshold tang tu 5 -> 6 de it bi ngat mach hon
 export const DEFAULT_ROUTER_CONFIG: RouterConfig = {
-  providerPriority: ['groq', 'together', 'huggingface'],
-  selectionWeights: { health: 0.4, quota: 0.25, latency: 0.2, errorRate: 0.15 },
-  timeoutMs: 12_000,
+  providerPriority: ['groq', 'gemini', 'openrouter', 'together', 'huggingface'],
+  selectionWeights: { health: 0.35, quota: 0.25, latency: 0.25, errorRate: 0.15 },
+  timeoutMs: 20_000,
   maxRetries: 2,
-  retryBaseDelayMs: 300,
-  retryMaxDelayMs: 4_000,
-  circuitBreakerThreshold: 5,
-  circuitResetMs: 60_000,
-  cacheTtlMs: 5 * 60_000,   // 5 min
-  cacheMaxSize: 200,
-  crossCheckThreshold: 0.65,
+  retryBaseDelayMs: 400,
+  retryMaxDelayMs: 5_000,
+  circuitBreakerThreshold: 6,
+  circuitResetMs: 90_000,
+  cacheTtlMs: 10 * 60_000,
+  cacheMaxSize: 300,
+  crossCheckThreshold: 0.55,
   crossCheckEnabled: true,
-  maxInputTokens: 1_500,
-  maxOutputTokens: 512,
+  maxInputTokens: 2_500,
+  maxOutputTokens: 2_048,
 };

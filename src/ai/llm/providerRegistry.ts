@@ -1,23 +1,30 @@
 /**
- * Provider Registry
+ * Provider Registry (Noi dang ky Nha cung cap)
  *
- * Creates and wires all providers + the LLM router.
- * Call `buildLLMRouter()` once at app startup and pass it to `initOrchestrator()`.
+ * Tao va ket noi tat ca cac nha cung cap cung voi LLM router.
+ * Goi ham `buildLLMRouter()` mot lan khi khoi dong ung dung va truyen no vao `initOrchestrator()`.
  *
- * To add a new provider:
- *   1. Create a class implementing LLMProvider in providers/
- *   2. Import it here and add to the `providers` array
- *   3. Add its id to VITE_LLM_PROVIDER_PRIORITY in .env
+ * NANG CAP v2:
+ *  - Thu tu uu tien mac dinh: Groq -> Gemini -> OpenRouter -> Together -> HuggingFace
+ *    (Groq mien phi, nhanh nhat; Gemini co flash mien phi)
+ *  - readEnvConfig doc them VITE_LLM_MAX_OUTPUT_TOKENS de sync voi sentinelAI
+ *
+ * De them mot nha cung cap moi:
+ *   1. Tao mot class implement LLMProvider trong thu muc providers/
+ *   2. Import class do vao day va them vao mang `providers`
+ *   3. Them id cua no vao VITE_LLM_PROVIDER_PRIORITY trong file .env
  */
 
 import { LLMRouter } from './llmRouter.js';
 import { ProviderMetricsTracker } from './metricsTracker.js';
-import { DEFAULT_ROUTER_CONFIG, RouterConfig } from './types.js';
+import { GeminiProvider } from './providers/geminiProvider.js';
 import { GroqProvider } from './providers/groqProvider.js';
-import { TogetherProvider } from './providers/togetherProvider.js';
 import { HuggingFaceProvider } from './providers/huggingfaceProvider.js';
+import { OpenRouterProvider } from './providers/openrouterProvider.js';
+import { TogetherProvider } from './providers/togetherProvider.js';
+import { DEFAULT_ROUTER_CONFIG, RouterConfig } from './types';
 
-/** Read optional env overrides from Vite */
+/** Doc cac cau hinh ghi de (tuy chon) tu bien moi truong Vite */
 function readEnvConfig(): Partial<RouterConfig> {
   const env = (import.meta as unknown as Record<string, Record<string, string>>).env ?? {};
 
@@ -52,8 +59,9 @@ function readEnvConfig(): Partial<RouterConfig> {
 }
 
 /**
- * Build and return a fully wired LLMRouter.
- * Providers with no API key will have health score=0 and be skipped automatically.
+ * Xay dung va tra ve mot LLMRouter da duoc ket noi day du.
+ * Thu tu provider: Groq -> Gemini -> OpenRouter -> Together -> HuggingFace
+ * Cac nha cung cap khong co API key se co diem suc khoe (health score) = 0 va tu dong bi bo qua.
  */
 export function buildLLMRouter(): LLMRouter {
   const config  = { ...DEFAULT_ROUTER_CONFIG, ...readEnvConfig() };
@@ -62,8 +70,11 @@ export function buildLLMRouter(): LLMRouter {
     config.circuitResetMs,
   );
 
+  // NANG CAP: Groq dat dau tien (nhanh, mien phi, quota tot)
   const providers = [
     new GroqProvider(metrics),
+    new GeminiProvider(metrics),
+    new OpenRouterProvider(metrics),
     new TogetherProvider(metrics),
     new HuggingFaceProvider(metrics),
   ];

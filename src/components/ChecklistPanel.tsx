@@ -3,16 +3,16 @@ import { useStore } from '../store/useStore';
 import { Finding } from '../types';
 
 const OWASP_CATS = [
-  { id: 'A01', name: 'Broken Access Control' },
-  { id: 'A02', name: 'Cryptographic Failures' },
-  { id: 'A03', name: 'Injection' },
-  { id: 'A04', name: 'Insecure Design' },
-  { id: 'A05', name: 'Security Misconfiguration' },
-  { id: 'A06', name: 'Vulnerable & Outdated Components' },
-  { id: 'A07', name: 'ID & Authentication Failures' },
-  { id: 'A08', name: 'Software & Data Integrity Failures' },
-  { id: 'A09', name: 'Security Logging & Monitoring Failures' },
-  { id: 'A10', name: 'Server-Side Request Forgery (SSRF)' },
+  { id: 'A01', name: 'Broken Access Control', desc: 'Lỗi phân quyền/kiểm soát truy cập (IDOR, bypass, thiếu kiểm tra quyền).' },
+  { id: 'A02', name: 'Cryptographic Failures', desc: 'Lỗi mã hoá/bảo vệ dữ liệu nhạy cảm (HTTPS, key/secret, thuật toán yếu).' },
+  { id: 'A03', name: 'Injection', desc: 'Lỗi chèn lệnh (SQLi, XSS, Command injection, SSTI...) do xử lý input không an toàn.' },
+  { id: 'A04', name: 'Insecure Design', desc: 'Thiết kế thiếu kiểm soát bảo mật (thiếu rate limit, flow không an toàn, threat model).' },
+  { id: 'A05', name: 'Security Misconfiguration', desc: 'Cấu hình sai/thiếu (CORS, headers, debug mode, dịch vụ/endpoint bị lộ).' },
+  { id: 'A06', name: 'Vulnerable & Outdated Components', desc: 'Thư viện/phụ thuộc có CVE hoặc phiên bản cũ, không còn được vá.' },
+  { id: 'A07', name: 'ID & Authentication Failures', desc: 'Lỗi xác thực/phiên (JWT, session, mật khẩu, MFA, reset password).' },
+  { id: 'A08', name: 'Software & Data Integrity Failures', desc: 'Rủi ro integrity (supply-chain, update, CI/CD, deserialization không an toàn).' },
+  { id: 'A09', name: 'Security Logging & Monitoring Failures', desc: 'Thiếu log/giám sát cảnh báo (khó phát hiện tấn công, thiếu audit trail).' },
+  { id: 'A10', name: 'Server-Side Request Forgery (SSRF)', desc: 'Server bị ép gọi tới tài nguyên nội bộ/metadata thông qua URL do user điều khiển.' },
 ];
 
 export const CONTEXT_ITEM_DETAILS: Record<string, { todos: string[]; recommend: string }> = {
@@ -149,7 +149,7 @@ export const ChecklistItem: React.FC<ChecklistItemProps> = ({ id, label, hideCom
         <div className="chk-item-detail">
           {todos && todos.length > 0 && (
             <div className="chk-detail-section">
-              <div className="chk-detail-label">✅ Việc cần làm</div>
+              <div className="chk-detail-label">Việc cần làm</div>
               <ul className="chk-todo-list">
                 {todos.map((t, i) => <li key={i} className="chk-todo-item">{t}</li>)}
               </ul>
@@ -157,7 +157,7 @@ export const ChecklistItem: React.FC<ChecklistItemProps> = ({ id, label, hideCom
           )}
           {recommend && (
             <div className="chk-detail-section">
-              <div className="chk-detail-label">💡 Khuyến nghị</div>
+              <div className="chk-detail-label">Khuyến nghị</div>
               <div className="chk-recommend-text">{recommend}</div>
             </div>
           )}
@@ -175,35 +175,21 @@ const ChecklistSourceBanner: React.FC<{
 }> = ({ hasUrlLocal, hasProject, urlTarget }) => {
   if (!hasUrlLocal && !hasProject) return null;
   const isCombined = hasUrlLocal && hasProject;
+
+  const sourceLabel = isCombined
+    ? 'URL (localhost) + Mã nguồn'
+    : hasUrlLocal
+      ? 'URL (localhost)'
+      : 'Mã nguồn';
+
   return (
-    <div style={{
-      background: isCombined ? 'var(--accent-bg, rgba(99,102,241,0.08))' : 'var(--bg-card)',
-      border: `1px solid ${isCombined ? 'var(--accent)' : 'var(--border)'}`,
-      borderRadius: 8, padding: '10px 14px', marginBottom: 4,
-      display: 'flex', flexDirection: 'column', gap: 6,
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, fontSize: 12 }}>
-        {isCombined ? (
-          <><span style={{ color: 'var(--accent)' }}>🔗 Kết hợp</span><span style={{ color: 'var(--text-3)', fontWeight: 400 }}>URL + Project</span></>
-        ) : hasUrlLocal ? (
-          <><span style={{ color: 'var(--accent)' }}>🌐 URL Scan</span><span style={{ color: 'var(--text-3)', fontWeight: 400, fontSize: 11 }}>{urlTarget}</span></>
-        ) : (
-          <span style={{ color: 'var(--accent)' }}>📂 Project Scan</span>
-        )}
-      </div>
-      {isCombined && (
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: 'var(--accent)', color: '#fff', fontWeight: 500 }}>
-            🌐 {urlTarget}
-          </span>
-          <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: 'var(--bg-input)', color: 'var(--text-2)', border: '1px solid var(--border)' }}>
-            📂 Project Scan
-          </span>
-        </div>
-      )}
-      <div style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.5, borderTop: '1px solid var(--border)', paddingTop: 6, marginTop: 2 }}>
-        <span style={{ color: 'var(--med)', fontWeight: 600 }}>⚠️ </span>
-        Scan cả <strong>URL (localhost)</strong> lẫn <strong>Project</strong> để tìm đầy đủ lỗ hổng.
+    <div className="onboarding-banner" style={{ marginBottom: 4 }}>
+      <div className="onboarding-banner-title">Nguồn dữ liệu cho Checklist</div>
+      <div className="onboarding-banner-text">
+        Đang dùng kết quả từ: <strong>{sourceLabel}</strong>
+        {hasUrlLocal && urlTarget ? <span> — {urlTarget}</span> : null}
+        .
+        {isCombined ? ' Nên chạy cả hai để có checklist đầy đủ hơn.' : ''}
       </div>
     </div>
   );
@@ -230,11 +216,25 @@ export const ChecklistPanel: React.FC = () => {
   if (!hasAny) {
     return (
       <div className="empty-state">
-        <div className="empty-icon">📂</div>
-        <p>Chạy <b>Project Scan</b> hoặc <b>URL Scan</b> với link <b>localhost</b> để tạo Checklist.</p>
-        <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8, lineHeight: 1.5 }}>
-          <span style={{ color: 'var(--med)' }}>⚠️</span> Nên chạy <strong>cả hai</strong> để phát hiện đầy đủ lỗ hổng runtime và source code.
-        </p>
+        <div className="empty-state-title">Chưa có Checklist</div>
+        <div className="empty-state-steps">
+          <div className="empty-state-step">
+            <span className="empty-state-step-num">1</span>
+            <span>Chạy <strong>Project Scan</strong> hoặc <strong>URL Scan</strong> (localhost)</span>
+          </div>
+          <div className="empty-state-step">
+            <span className="empty-state-step-num">2</span>
+            <span>Mở lại tab Checklist để xem gợi ý xử lý</span>
+          </div>
+        </div>
+        <div className="empty-state-actions">
+          <button
+            className="btn-link"
+            onClick={() => window.dispatchEvent(new Event('sentinel:open-shortcuts'))}
+          >
+            Xem hướng dẫn nhanh →
+          </button>
+        </div>
       </div>
     );
   }
@@ -250,22 +250,29 @@ export const ChecklistPanel: React.FC = () => {
   const hasPHP    = techStack.some(t => ['PHP','Laravel'].includes(t));
 
   const coverageLabel = (() => {
-    if (covered === 0) return 'No issues detected';
-    if (hasUrlLocal && hasProjectScan) return `${covered} categories — URL + Project`;
-    if (hasUrlLocal) return `${covered} categories — URL Scan`;
-    return `${covered} categories — Project Scan`;
+    if (covered === 0) return 'Chưa phát hiện vấn đề nào theo OWASP Top 10';
+    if (hasUrlLocal && hasProjectScan) return `${covered}/${total} danh mục — URL (localhost) + Mã nguồn`;
+    if (hasUrlLocal) return `${covered}/${total} danh mục — URL (localhost)`;
+    return `${covered}/${total} danh mục — Mã nguồn`;
   })();
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <ChecklistSourceBanner hasUrlLocal={hasUrlLocal} hasProject={hasProjectScan} urlTarget={urlTarget} />
 
+      <div className="onboarding-banner">
+        <div className="onboarding-banner-title">Cách dùng Checklist</div>
+        <div className="onboarding-banner-text">
+          Checklist giúp bạn chuyển kết quả scan thành các việc cần làm. Hãy ưu tiên xử lý các danh mục có số lượng finding cao và mức độ nghiêm trọng lớn.
+        </div>
+      </div>
+
       {/* OWASP Top 10 Grid */}
       <div className="section">
-        <div className="section-label">OWASP Top 10 — 2025</div>
+        <div className="section-label">OWASP Top 10</div>
         <div className="chk-coverage">
           <div className="chk-coverage-hdr">
-            <span>Coverage</span>
+            <span>Độ bao phủ</span>
             <span className="chk-coverage-frac">{covered}/{total}</span>
           </div>
           <div className="chk-coverage-track">
@@ -284,8 +291,9 @@ export const ChecklistPanel: React.FC = () => {
                   : <span className="chk-pass">✓</span>}
               </div>
               <div className="chk-name">{cat.name}</div>
+              {cat.desc && <div className="chk-desc">{cat.desc}</div>}
               {cat.count > 0 && cat.severity && (
-                <div className="chk-sev" style={{ color: sevColor(cat.severity) }}>{cat.severity}</div>
+                <div className="chk-sev" style={{ color: sevColor(cat.severity) }}>{cat.severity.toUpperCase()}</div>
               )}
             </div>
           ))}
@@ -296,9 +304,9 @@ export const ChecklistPanel: React.FC = () => {
       {techStack.length > 0 && (
         <div className="section">
           <div className="chk-section-header">
-            <div className="section-label" style={{ marginBottom: 0 }}>Context-Based</div>
+            <div className="section-label" style={{ marginBottom: 0 }}>Gợi ý theo công nghệ</div>
             <button className="btn-checklist-toggle" onClick={() => setHideCompleted(v => !v)}>
-              {hideCompleted ? '👁️ Show' : '🙈 Hide'} Completed
+              {hideCompleted ? 'Hiện tất cả' : 'Ẩn mục đã xong'}
             </button>
           </div>
           <div className="chk-items-list">
@@ -329,9 +337,12 @@ export const ChecklistPanel: React.FC = () => {
         </div>
       )}
 
-      <button className="btn-secondary" style={{ width: '100%' }}
-        onClick={() => window.owaspWorkbench?.openDocs?.('https://owasp.org/Top10/2025/')}>
-        Open OWASP Docs
+      <button
+        className="btn-secondary"
+        style={{ width: '100%' }}
+        onClick={() => window.owaspWorkbench?.openDocs?.('https://owasp.org/Top10/2025/')}
+      >
+        Mở tài liệu OWASP
       </button>
     </div>
   );

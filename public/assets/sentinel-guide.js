@@ -1,510 +1,498 @@
 /**
- * SENTINEL v2 — Bảng hướng dẫn người dùng
- * Được chèn vào renderer qua index.html
- * Tạo GuidePanel ở cạnh phải workspace, bật/tắt bằng nút "Hướng dẫn" trên header
+ * SENTINEL v2 — Hướng dẫn sử dụng (Redesigned)
+ * Slide-in sidebar, dùng đúng design tokens của app
  */
 (function () {
   'use strict';
 
-  // ── Dữ liệu hướng dẫn ──────────────────────────────────────────────────────
+  const TABS = ['Bắt đầu', 'URL Scan', 'Dự án', 'Kết quả', 'OWASP'];
 
-  const GUIDE_TABS = ['Bắt đầu', 'URL Scan', 'Project Scan', 'Kết quả', 'Lỗ hổng'];
+  const DATA = {
+    0: [ // Bắt đầu
+      {
+        icon: '🛡️', title: 'SENTINEL là gì?', open: true,
+        items: [
+          'Công cụ kiểm thử bảo mật theo chuẩn <strong>OWASP Top 10 — 2025</strong>, chạy trực tiếp trên máy (Electron), không cần server riêng.',
+          'Hỗ trợ <strong>URL Scan</strong> (black-box từ xa) và <strong>Project Scan</strong> (phân tích source code tĩnh).',
+        ],
+        tip: 'Chạy cả hai chế độ để phát hiện đầy đủ lỗ hổng — URL tìm lỗi runtime, Project tìm lỗi source code.'
+      },
+      {
+        icon: '⚙️', title: 'Quy trình cơ bản', open: false,
+        items: [
+          'Chọn tab <strong>Quét Website</strong> hoặc <strong>Quét Mã Nguồn</strong>.',
+          'Điền URL hoặc chọn thư mục dự án.',
+          'Nhấn <strong>Bắt đầu quét</strong> — theo dõi log thời gian thực.',
+          'Xem kết quả ở panel bên phải, xuất báo cáo HTML/JSON.'
+        ]
+      },
+      {
+        icon: '📁', title: 'Lịch sử quét', open: false,
+        items: [
+          'Mỗi lần quét thành công lưu vào <strong>Lịch sử</strong> (tối đa 10 mục).',
+          'Nhấn <strong>Lịch sử</strong> ở header để xem và khôi phục kết quả cũ.'
+        ]
+      }
+    ],
+    1: [ // URL Scan
+      {
+        icon: '🎯', title: 'Nhập URL mục tiêu', open: true,
+        items: [
+          'Nhập URL đầy đủ: <code>https://example.com</code> hoặc <code>http://localhost:3000</code>.',
+          'Nhấn <strong>Enter</strong> hoặc nút <strong>Bắt đầu quét website</strong> màu vàng.',
+        ],
+        warn: 'Chỉ scan URL bạn có quyền kiểm thử. Không scan hệ thống người khác khi chưa được phép.'
+      },
+      {
+        icon: '🔬', title: 'Phạm vi & Cường độ', open: false,
+        items: [
+          '<strong>Phạm vi (Depth):</strong> 0 = chỉ URL gốc; 1 = URL + link trực tiếp (khuyến nghị); 2 = sâu hơn.',
+          '<strong>Cường độ (Budget):</strong> Số HTTP request tối đa. Budget cao = kỹ hơn nhưng chậm hơn.',
+        ],
+        tip: 'Depth 1 + Budget 60 là cấu hình cân bằng (~30–60 giây). Budget 200 cho mục tiêu quan trọng.'
+      },
+      {
+        icon: '🔑', title: 'Xác thực (Authentication)', open: false,
+        items: [
+          '<strong>Cookie:</strong> Dán từ DevTools → Application → Cookies (dạng <code>session=abc; token=xyz</code>).',
+          '<strong>Bearer Token:</strong> JWT, dán giá trị <code>eyJhbGci…</code> (không cần prefix "Bearer").',
+          '<strong>Custom Headers:</strong> JSON, ví dụ <code>{"X-API-Key": "abc123"}</code>.'
+        ]
+      }
+    ],
+    2: [ // Project Scan
+      {
+        icon: '📂', title: 'Chọn thư mục dự án', open: true,
+        items: [
+          'Nhấn <strong>Chọn thư mục</strong> để mở dialog — chọn thư mục gốc (chứa <code>package.json</code>, <code>.csproj</code>…).',
+          'Hoặc dán đường dẫn tuyệt đối vào ô input.',
+          'Nhấn <strong>Bắt đầu phân tích</strong> — không chạy code, hoàn toàn an toàn.'
+        ]
+      },
+      {
+        icon: '🔍', title: 'SENTINEL kiểm tra gì?', open: false,
+        items: [
+          '<strong>Dependencies:</strong> <code>package.json</code>, <code>package-lock.json</code> — CVE và lockfile không an toàn.',
+          '<strong>Secrets:</strong> API key, password, token hardcode trong source code và config.',
+          '<strong>Config files:</strong> <code>.env</code>, <code>appsettings.json</code> — thông tin nhạy cảm bị expose.',
+          '<strong>Logging:</strong> Code thiếu error handling hoặc log sai cách.'
+        ],
+        tip: 'Project Scan hoạt động tĩnh — không kết nối mạng, không thực thi code của bạn.'
+      },
+      {
+        icon: '🏗️', title: 'Tech Stack hỗ trợ', open: false,
+        items: [
+          '<strong>Node.js / React / Next.js:</strong> npm deps, JWT, CORS, secrets.',
+          '<strong>Spring Boot / Java:</strong> Actuator, Maven/Gradle CVE, Spring Data REST.',
+          '<strong>PHP / Laravel:</strong> APP_DEBUG, Debugbar/Telescope, file upload.'
+        ]
+      }
+    ],
+    3: [ // Kết quả
+      {
+        icon: '📊', title: 'Risk Dashboard', open: true,
+        items: [
+          '<strong>Gauge 0–100:</strong> ≥70 = nghiêm trọng, ≥40 = cao, ≥15 = trung bình, <15 = thấp.',
+          '<strong>Ô severity:</strong> Số lỗi theo mức CRIT / HIGH / MED / LOW.',
+          '<strong>Biểu đồ OWASP:</strong> Phân bổ theo danh mục A01–A10.'
+        ]
+      },
+      {
+        icon: '🔎', title: 'Lọc & Tìm kiếm', open: false,
+        items: [
+          '<strong>Tìm kiếm:</strong> Gõ từ khóa để lọc theo tên lỗi hoặc Rule ID (vd: <code>A05-XSS</code>).',
+          '<strong>Lọc severity:</strong> Chỉ xem Critical, High, Medium hoặc Low.',
+          'Nhấn finding card để xem chi tiết: <strong>Vị trí, Payload, Bằng chứng, Khuyến nghị</strong>.'
+        ]
+      },
+      {
+        icon: '📤', title: 'Export báo cáo', open: false,
+        items: [
+          '<strong>Xuất HTML:</strong> Báo cáo dạng trang web — dễ đọc, gửi cho team.',
+          '<strong>Xuất JSON:</strong> Dữ liệu thô — tích hợp CI/CD hoặc xử lý tự động.'
+        ],
+        tip: 'Tên file được gợi ý tự động theo URL/tên thư mục và ngày scan.'
+      }
+    ],
+    4: 'vulns' // OWASP
+  };
 
-  const GETTING_STARTED = [
-    {
-      icon: '🛡️',
-      title: 'SENTINEL là gì?',
-      open: true,
-      content: `
-        <div class="guide-step"><div class="guide-step-num">1</div>
-          <div class="guide-step-text">SENTINEL là công cụ kiểm thử bảo mật web theo chuẩn <strong>OWASP Top 10 — 2025</strong>, chạy trực tiếp trên máy (Electron app), không cần cài server riêng.</div>
-        </div>
-        <div class="guide-step"><div class="guide-step-num">2</div>
-          <div class="guide-step-text">Hỗ trợ hai chế độ: <strong>URL Scan</strong> (kiểm thử black-box từ xa) và <strong>Project Scan</strong> (phân tích source code tĩnh).</div>
-        </div>
-        <div class="guide-tip">
-          <span class="guide-tip-icon">💡</span>
-          <span class="guide-tip-text"><strong>Khuyến nghị:</strong> Chạy cả hai chế độ để phát hiện đầy đủ lỗ hổng — URL tìm lỗi runtime, Project tìm lỗi source code.</span>
-        </div>
-      `
-    },
-    {
-      icon: '⚙️',
-      title: 'Quy trình sử dụng cơ bản',
-      open: false,
-      content: `
-        <div class="guide-step"><div class="guide-step-num">1</div>
-          <div class="guide-step-text">Chọn tab <strong>URL Scan</strong> hoặc <strong>Project Scan</strong> trên thanh điều hướng.</div>
-        </div>
-        <div class="guide-step"><div class="guide-step-num">2</div>
-          <div class="guide-step-text">Điền thông tin mục tiêu (URL hoặc thư mục dự án), cấu hình tùy chọn nếu cần.</div>
-        </div>
-        <div class="guide-step"><div class="guide-step-num">3</div>
-          <div class="guide-step-text">Nhấn <strong>Bắt đầu quét</strong> — theo dõi tiến trình thời gian thực trong panel log.</div>
-        </div>
-        <div class="guide-step"><div class="guide-step-num">4</div>
-          <div class="guide-step-text">Xem kết quả ở tab <strong>Kết quả</strong>, tổng hợp checklist ở tab <strong>Checklist</strong>.</div>
-        </div>
-        <div class="guide-step"><div class="guide-step-num">5</div>
-          <div class="guide-step-text">Export báo cáo dạng <code>HTML</code> hoặc <code>JSON</code> để lưu hoặc chia sẻ.</div>
-        </div>
-      `
-    },
-    {
-      icon: '📁',
-      title: 'Lịch sử scan',
-      open: false,
-      content: `
-        <div class="guide-step"><div class="guide-step-num">1</div>
-          <div class="guide-step-text">Mỗi lần scan thành công được lưu vào <strong>Lịch sử quét</strong> (tối đa 10 mục).</div>
-        </div>
-        <div class="guide-step"><div class="guide-step-num">2</div>
-          <div class="guide-step-text">Nhấn nút <strong>Lịch sử</strong> ở góc phải header để xem lịch sử và nhấn vào một mục để khôi phục kết quả.</div>
-        </div>
-        <div class="guide-step"><div class="guide-step-num">3</div>
-          <div class="guide-step-text">Có thể xóa toàn bộ lịch sử bằng nút <strong>Xóa tất cả</strong> bên trong dropdown.</div>
-        </div>
-      `
-    }
+  const VULNS = [
+    { id: 'A01', name: 'Broken Access Control',        sev: 'critical', desc: 'IDOR, bypass, thiếu kiểm tra quyền, JWT/CSRF lỗi.' },
+    { id: 'A02', name: 'Cryptographic Failures',       sev: 'high',     desc: 'Cookie flags, CORS wildcard, HTTP không mã hóa, thiếu CSP/HSTS.' },
+    { id: 'A03', name: 'Injection / Supply Chain',     sev: 'critical', desc: 'SQLi, XSS, Command Injection, SSTI, npm CVE.' },
+    { id: 'A04', name: 'Insecure Design',              sev: 'medium',   desc: 'Thiếu rate limit, sensitive data exposure, threat model.' },
+    { id: 'A05', name: 'Security Misconfiguration',    sev: 'high',     desc: 'Swagger/Actuator public, TRACE method, CORS sai.' },
+    { id: 'A07', name: 'Auth & Session Failures',      sev: 'critical', desc: 'Thiếu rate limiting, account enumeration, session fixation.' },
+    { id: 'A08', name: 'Software Integrity Failures',  sev: 'high',     desc: 'Script ngoài thiếu SRI, config không tin cậy.' },
+    { id: 'A09', name: 'Logging & Monitoring',         sev: 'medium',   desc: 'Thiếu alerting, auth không có audit log.' },
+    { id: 'A10', name: 'SSRF & Exception Handling',    sev: 'medium',   desc: 'Stack trace lộ, SSRF, 5xx với input thông thường.' },
   ];
-
-  const URL_SCAN_GUIDE = [
-    {
-      icon: '🎯',
-      title: 'Nhập URL mục tiêu',
-      open: true,
-      content: `
-        <div class="guide-step"><div class="guide-step-num">1</div>
-          <div class="guide-step-text">Nhập URL đầy đủ bao gồm <code>https://</code>, ví dụ: <code>https://example.com</code> hoặc <code>http://localhost:3000</code>.</div>
-        </div>
-        <div class="guide-step"><div class="guide-step-num">2</div>
-          <div class="guide-step-text">Nhấn <strong>Enter</strong> hoặc nút <strong>Bắt đầu quét</strong> màu vàng để bắt đầu.</div>
-        </div>
-        <div class="guide-warn">
-          <span class="guide-warn-icon">⚠️</span>
-          <span class="guide-warn-text">Chỉ scan URL mà bạn có quyền kiểm thử. Không scan hệ thống của người khác mà không được phép.</span>
-        </div>
-      `
-    },
-    {
-      icon: '🔬',
-      title: 'Crawl Depth & Request Budget',
-      open: false,
-      content: `
-        <div class="guide-step"><div class="guide-step-num">1</div>
-          <div class="guide-step-text"><strong>Crawl Depth:</strong> Số lớp link được duyệt từ URL gốc. <code>0</code> = chỉ URL chính; <code>1</code> = URL chính + các link trực tiếp (khuyến nghị); <code>2</code> = sâu hơn, chậm hơn.</div>
-        </div>
-        <div class="guide-step"><div class="guide-step-num">2</div>
-          <div class="guide-step-text"><strong>Request Budget:</strong> Tổng số HTTP request tối đa. Budget cao = kiểm tra injection nhiều hơn nhưng tốn thời gian hơn.</div>
-        </div>
-        <div class="guide-tip">
-          <span class="guide-tip-icon">💡</span>
-          <span class="guide-tip-text"><strong>Gợi ý:</strong> Depth 1 + Budget 60 là cấu hình cân bằng tốt nhất (~30–60 giây). Dùng Budget 200 cho mục tiêu quan trọng cần kiểm tra kỹ.</span>
-        </div>
-      `
-    },
-    {
-      icon: '🔑',
-      title: 'Xác thực (Authentication)',
-      open: false,
-      content: `
-        <div class="guide-step"><div class="guide-step-num">1</div>
-          <div class="guide-step-text">Mở rộng mục <strong>Authentication</strong> để scan các trang yêu cầu đăng nhập.</div>
-        </div>
-        <div class="guide-step"><div class="guide-step-num">2</div>
-          <div class="guide-step-text"><strong>Cookie:</strong> Dán cookie từ browser (DevTools → Application → Cookies), dạng <code>session=abc123; token=xyz</code>.</div>
-        </div>
-        <div class="guide-step"><div class="guide-step-num">3</div>
-          <div class="guide-step-text"><strong>Bearer Token:</strong> Token JWT, dán giá trị <code>eyJhbGci…</code> (không cần prefix "Bearer").</div>
-        </div>
-        <div class="guide-step"><div class="guide-step-num">4</div>
-          <div class="guide-step-text"><strong>Custom Headers:</strong> JSON object, ví dụ <code>{"X-API-Key": "abc123"}</code>.</div>
-        </div>
-      `
-    }
-  ];
-
-  const PROJECT_SCAN_GUIDE = [
-    {
-      icon: '📂',
-      title: 'Chọn thư mục dự án',
-      open: true,
-      content: `
-        <div class="guide-step"><div class="guide-step-num">1</div>
-          <div class="guide-step-text">Nhấn nút <strong>Chọn thư mục</strong> để mở hộp thoại chọn thư mục. Chọn thư mục gốc của dự án (chứa <code>package.json</code>, <code>.csproj</code>, v.v.).</div>
-        </div>
-        <div class="guide-step"><div class="guide-step-num">2</div>
-          <div class="guide-step-text">Hoặc dán đường dẫn tuyệt đối vào ô input, ví dụ: <code>C:\\Projects\\my-app</code>.</div>
-        </div>
-        <div class="guide-step"><div class="guide-step-num">3</div>
-          <div class="guide-step-text">Nhấn <strong>Quét dự án</strong> — SENTINEL sẽ đọc file cấu hình, dependencies và source code để phân tích.</div>
-        </div>
-      `
-    },
-    {
-      icon: '🔍',
-      title: 'SENTINEL quét gì trong source?',
-      open: false,
-      content: `
-        <div class="guide-step"><div class="guide-step-num">•</div>
-          <div class="guide-step-text"><strong>Dependencies:</strong> <code>package.json</code>, <code>package-lock.json</code>, <code>*.csproj</code> — tìm dependencies có CVE hoặc cấu hình lockfile không an toàn.</div>
-        </div>
-        <div class="guide-step"><div class="guide-step-num">•</div>
-          <div class="guide-step-text"><strong>Secrets:</strong> Tìm API key, password, token hardcode trong source code và file config.</div>
-        </div>
-        <div class="guide-step"><div class="guide-step-num">•</div>
-          <div class="guide-step-text"><strong>Config files:</strong> <code>.env</code>, <code>appsettings.json</code>, v.v. — kiểm tra thông tin nhạy cảm bị expose.</div>
-        </div>
-        <div class="guide-step"><div class="guide-step-num">•</div>
-          <div class="guide-step-text"><strong>Logging patterns:</strong> Phát hiện code thiếu error handling hoặc log không đúng cách.</div>
-        </div>
-        <div class="guide-tip">
-          <span class="guide-tip-icon">💡</span>
-          <span class="guide-tip-text">Project Scan hoạt động <strong>tĩnh</strong> — không chạy code của bạn, không kết nối mạng, hoàn toàn an toàn.</span>
-        </div>
-      `
-    },
-    {
-      icon: '🏗️',
-      title: 'Tech Stack được hỗ trợ',
-      open: false,
-      content: `
-        <div class="guide-step"><div class="guide-step-num">•</div>
-          <div class="guide-step-text"><strong>Node.js / React / Next.js:</strong> Kiểm tra npm deps, JWT config, CORS, hardcoded secrets.</div>
-        </div>
-        <div class="guide-step"><div class="guide-step-num">•</div>
-          <div class="guide-step-text"><strong>Spring Boot / Java:</strong> Kiểm tra Actuator endpoints, Maven/Gradle deps CVE, Spring Data REST exposure.</div>
-        </div>
-        <div class="guide-step"><div class="guide-step-num">•</div>
-          <div class="guide-step-text"><strong>PHP / Laravel:</strong> Kiểm tra APP_DEBUG, Debugbar/Telescope public, file upload validation.</div>
-        </div>
-        <div class="guide-step"><div class="guide-step-num">•</div>
-          <div class="guide-step-text"><strong>Generic:</strong> Bất kỳ dự án nào cũng được phân tích theo checklist bảo mật chung.</div>
-        </div>
-      `
-    }
-  ];
-
-  const RESULTS_GUIDE = [
-    {
-      icon: '📊',
-      title: 'Risk Dashboard',
-      open: true,
-      content: `
-        <div class="guide-step"><div class="guide-step-num">1</div>
-          <div class="guide-step-text"><strong>Điểm gauge (0–100):</strong> Điểm rủi ro tổng hợp. ≥70 = rủi ro nghiêm trọng, ≥40 = rủi ro cao, ≥15 = rủi ro trung bình.</div>
-        </div>
-        <div class="guide-step"><div class="guide-step-num">2</div>
-          <div class="guide-step-text"><strong>Ô severity:</strong> Số lượng lỗi theo mức CRIT / HIGH / MED / LOW.</div>
-        </div>
-        <div class="guide-step"><div class="guide-step-num">3</div>
-          <div class="guide-step-text"><strong>Biểu đồ OWASP:</strong> Phân bổ lỗi theo danh mục A01–A10, giúp xác định khu vực yếu nhất.</div>
-        </div>
-      `
-    },
-    {
-      icon: '🔎',
-      title: 'Lọc và tìm kiếm Findings',
-      open: false,
-      content: `
-        <div class="guide-step"><div class="guide-step-num">1</div>
-          <div class="guide-step-text"><strong>Tìm kiếm:</strong> Gõ từ khóa để lọc theo tên lỗi hoặc Rule ID (ví dụ: <code>A05-XSS</code>).</div>
-        </div>
-        <div class="guide-step"><div class="guide-step-num">2</div>
-          <div class="guide-step-text"><strong>Lọc severity:</strong> Chỉ xem Critical, High, Medium hoặc Low.</div>
-        </div>
-        <div class="guide-step"><div class="guide-step-num">3</div>
-          <div class="guide-step-text"><strong>Lọc collector:</strong> <code>blackbox</code> = quét HTTP, <code>fuzzer</code> = kiểm thử injection, <code>source</code> = phân tích mã nguồn.</div>
-        </div>
-        <div class="guide-step"><div class="guide-step-num">4</div>
-          <div class="guide-step-text">Nhấn vào finding card để xem chi tiết: <strong>Vị trí, Payload, Bằng chứng, Khuyến nghị khắc phục</strong>.</div>
-        </div>
-      `
-    },
-    {
-      icon: '📤',
-      title: 'Export báo cáo',
-      open: false,
-      content: `
-        <div class="guide-step"><div class="guide-step-num">1</div>
-          <div class="guide-step-text">Nhấn <strong>Xuất HTML</strong> để lưu báo cáo dạng trang web — dễ đọc, có thể mở bằng trình duyệt, phù hợp để gửi cho team.</div>
-        </div>
-        <div class="guide-step"><div class="guide-step-num">2</div>
-          <div class="guide-step-text">Nhấn <strong>Xuất JSON</strong> để lưu dữ liệu thô — phù hợp để tích hợp vào pipeline CI/CD hoặc xử lý tự động.</div>
-        </div>
-        <div class="guide-tip">
-          <span class="guide-tip-icon">💡</span>
-          <span class="guide-tip-text">Tên file export được gợi ý tự động theo URL/tên thư mục và ngày scan.</span>
-        </div>
-      `
-    }
-  ];
-
-  const VULNS_GUIDE = [
-    {
-      id: 'A01', name: 'Broken Access Control', sev: 'critical',
-      desc: 'Kiểm tra JWT, CSRF token, forced browsing, IDOR — các lỗi cho phép truy cập trái phép.'
-    },
-    {
-      id: 'A02', name: 'Cryptographic Failures', sev: 'high',
-      desc: 'Cookie flags, CORS wildcard, HTTP không mã hóa, thiếu security headers (CSP, HSTS, X-Frame-Options).'
-    },
-    {
-      id: 'A03', name: 'Injection / Supply Chain', sev: 'critical',
-      desc: 'SQL Injection, XSS, Command Injection, SSTI, npm/NuGet dependencies có CVE.'
-    },
-    {
-      id: 'A04', name: 'Insecure Design', sev: 'medium',
-      desc: 'HTTP không mã hóa, sensitive data exposure, thiếu threat model và abuse case design.'
-    },
-    {
-      id: 'A05', name: 'Security Misconfiguration', sev: 'high',
-      desc: 'Debug endpoints public (Swagger, phpinfo, Actuator), TRACE method, CORS sai cấu hình.'
-    },
-    {
-      id: 'A07', name: 'Auth & Session Failures', sev: 'critical',
-      desc: 'Thiếu rate limiting, account enumeration, session fixation, reset password thiếu throttling.'
-    },
-    {
-      id: 'A08', name: 'Software Integrity Failures', sev: 'high',
-      desc: 'Script ngoài không có SRI (Subresource Integrity), thực thi config không tin cậy.'
-    },
-    {
-      id: 'A09', name: 'Logging & Monitoring', sev: 'medium',
-      desc: 'Thiếu alerting/monitoring rõ ràng, luồng auth không có audit logging.'
-    },
-    {
-      id: 'A10', name: 'Exception & SSRF', sev: 'medium',
-      desc: 'Stack trace lộ ra ngoài, server lỗi 5xx với input thông thường, malformed input handling.'
-    },
-    {
-      id: 'GEN', name: 'Generic Security Checks', sev: 'low',
-      desc: 'Thiếu input validation/escaping, headers không đầy đủ, supply chain lockfile version cũ.'
-    }
-  ];
-
-  // ── Trạng thái panel ────────────────────────────────────────────────────────
 
   let guideOpen = false;
   let activeTab = 0;
-  const sectionState = {}; // { tabIndex_sectionIndex: boolean }
+  const openSections = {}; // key → boolean
 
-  // ── Render helpers ──────────────────────────────────────────────────────────
+  // ── Render ──────────────────────────────────────────────────────────────────
 
-  function sevClass(sev) {
-    return `guide-sev-${sev}`;
+  function sevColor(sev) {
+    if (sev === 'critical') return 'var(--crit)';
+    if (sev === 'high')     return 'var(--high)';
+    if (sev === 'medium')   return 'var(--med)';
+    return 'var(--low)';
+  }
+  function sevBg(sev) {
+    if (sev === 'critical') return 'var(--crit-bg)';
+    if (sev === 'high')     return 'var(--high-bg)';
+    if (sev === 'medium')   return 'var(--med-bg)';
+    return 'var(--low-bg)';
+  }
+  function sevBorder(sev) {
+    if (sev === 'critical') return 'var(--crit-b)';
+    if (sev === 'high')     return 'var(--high-b)';
+    if (sev === 'medium')   return 'var(--med-b)';
+    return 'var(--low-b)';
   }
 
   function renderVulns() {
-    return VULNS_GUIDE.map(v => `
-      <div class="guide-vuln-item">
-        <span class="guide-vuln-id">${v.id}</span>
-        <div class="guide-vuln-body">
-          <div class="guide-vuln-name">${v.name}</div>
-          <div class="guide-vuln-desc">${v.desc}</div>
+    return `<div style="display:flex;flex-direction:column;gap:5px;">` +
+      VULNS.map(v => `
+        <div style="display:flex;align-items:flex-start;gap:9px;padding:8px 10px;
+          background:var(--bg-input);border:1px solid var(--border-dim);
+          border-left:3px solid ${sevColor(v.sev)};border-radius:6px;">
+          <div style="display:flex;flex-direction:column;gap:1px;min-width:0;flex:1;">
+            <div style="display:flex;align-items:center;gap:7px;">
+              <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:${sevColor(v.sev)};flex-shrink:0;">${v.id}</span>
+              <span style="font-size:11.5px;font-weight:600;color:var(--text);">${v.name}</span>
+            </div>
+            <div style="font-size:11px;color:var(--text-2);line-height:1.45;margin-top:2px;">${v.desc}</div>
+          </div>
+          <span style="font-size:9px;font-family:var(--mono);font-weight:700;padding:2px 6px;
+            border-radius:3px;border:1px solid ${sevBorder(v.sev)};
+            background:${sevBg(v.sev)};color:${sevColor(v.sev)};
+            flex-shrink:0;white-space:nowrap;margin-top:1px;">${v.sev.toUpperCase()}</span>
         </div>
-        <span class="guide-vuln-sev ${sevClass(v.sev)}">${v.sev.toUpperCase()}</span>
-      </div>
-    `).join('');
+      `).join('') +
+    `</div>`;
   }
 
   function renderSections(sections, tabIdx) {
     return sections.map((sec, idx) => {
       const key = `${tabIdx}_${idx}`;
-      const isOpen = sectionState[key] !== undefined ? sectionState[key] : sec.open;
+      const isOpen = openSections[key] !== undefined ? openSections[key] : sec.open;
+
+      const itemsHtml = (sec.items || []).map(item => `
+        <div style="display:flex;gap:8px;align-items:flex-start;">
+          <div style="width:5px;height:5px;border-radius:50%;background:var(--accent-bright);
+            flex-shrink:0;margin-top:6px;border:1.5px solid var(--accent);"></div>
+          <div style="font-size:12px;color:var(--text-2);line-height:1.55;flex:1;">${item}</div>
+        </div>
+      `).join('');
+
+      const tipHtml = sec.tip ? `
+        <div style="display:flex;gap:7px;align-items:flex-start;
+          background:var(--accent-dim);border:1px solid var(--accent-border);
+          border-left:3px solid var(--accent-bright);border-radius:6px;padding:8px 10px;margin-top:4px;">
+          <span style="font-size:13px;flex-shrink:0;">💡</span>
+          <span style="font-size:11.5px;color:var(--text-2);line-height:1.5;">${sec.tip}</span>
+        </div>
+      ` : '';
+
+      const warnHtml = sec.warn ? `
+        <div style="display:flex;gap:7px;align-items:flex-start;
+          background:var(--crit-bg);border:1px solid var(--crit-b);
+          border-left:3px solid var(--crit);border-radius:6px;padding:8px 10px;margin-top:4px;">
+          <span style="font-size:13px;flex-shrink:0;">⚠️</span>
+          <span style="font-size:11.5px;color:var(--crit);line-height:1.5;font-weight:500;">${sec.warn}</span>
+        </div>
+      ` : '';
+
       return `
-        <div class="guide-section">
-          <div class="guide-section-hdr ${isOpen ? 'open' : ''}" data-key="${key}">
-            <span class="guide-section-icon">${sec.icon}</span>
-            <span class="guide-section-name">${sec.title}</span>
-            <span class="guide-section-caret ${isOpen ? 'open' : ''}">▶</span>
-          </div>
-          <div class="guide-section-body" style="display: ${isOpen ? 'flex' : 'none'};">
-            ${sec.content}
+        <div class="gd-section" data-key="${key}">
+          <button class="gd-section-hdr ${isOpen ? 'open' : ''}" data-key="${key}" type="button">
+            <span style="font-size:14px;">${sec.icon}</span>
+            <span class="gd-section-name">${sec.title}</span>
+            <span class="gd-caret ${isOpen ? 'open' : ''}">▶</span>
+          </button>
+          <div class="gd-section-body" style="display:${isOpen ? 'flex' : 'none'};">
+            ${itemsHtml}${tipHtml}${warnHtml}
           </div>
         </div>
       `;
     }).join('');
   }
 
-  function renderTabContent() {
-    switch (activeTab) {
-      case 0: return renderSections(GETTING_STARTED, 0);
-      case 1: return renderSections(URL_SCAN_GUIDE, 1);
-      case 2: return renderSections(PROJECT_SCAN_GUIDE, 2);
-      case 3: return renderSections(RESULTS_GUIDE, 3);
-      case 4: return `<div class="guide-vuln-list">${renderVulns()}</div>`;
-      default: return '';
-    }
+  function renderBody() {
+    const d = DATA[activeTab];
+    if (d === 'vulns') return renderVulns();
+    return renderSections(d, activeTab);
   }
 
-  function renderGuidePanel() {
+  function renderPanel() {
+    const tabsHtml = TABS.map((t, i) => `
+      <button class="gd-tab ${i === activeTab ? 'active' : ''}" data-tab="${i}" type="button">${t}</button>
+    `).join('');
+
     return `
-      <div class="guide-panel" id="sentinel-guide-panel">
-        <div class="guide-panel-hdr">
-          <div class="guide-panel-title">
-            <span class="guide-panel-title-icon">📖</span>
-            Hướng dẫn sử dụng
+      <aside id="sentinel-guide-panel" class="gd-panel" role="complementary" aria-label="Hướng dẫn sử dụng">
+        <div class="gd-header">
+          <div class="gd-header-title">
+            <span style="font-size:15px;">📖</span>
+            <span>Hướng dẫn</span>
           </div>
-          <button class="guide-close-btn" id="guide-close-btn" title="Đóng hướng dẫn">✕</button>
+          <button class="gd-close" id="gd-close-btn" title="Đóng hướng dẫn" type="button" aria-label="Đóng hướng dẫn">✕</button>
         </div>
-        <div class="guide-tabs" id="guide-tabs">
-          ${GUIDE_TABS.map((t, i) => `
-            <button class="guide-tab ${i === activeTab ? 'active' : ''}" data-tab="${i}">${t}</button>
-          `).join('')}
-        </div>
-        <div class="guide-body" id="guide-body">
-          ${renderTabContent()}
-        </div>
-      </div>
+        <div class="gd-tabs" id="gd-tabs" role="tablist">${tabsHtml}</div>
+        <div class="gd-body" id="gd-body" role="tabpanel">${renderBody()}</div>
+      </aside>
     `;
   }
 
-  // ── DOM manipulation ────────────────────────────────────────────────────────
+  // ── CSS inject ───────────────────────────────────────────────────────────────
 
-  function updateWorkspaceClass() {
-    if (guideOpen) {
-      document.body.classList.add('guide-visible');
-    } else {
-      document.body.classList.remove('guide-visible');
-    }
+  function injectStyles() {
+    if (document.getElementById('sentinel-guide-css')) return;
+    const style = document.createElement('style');
+    style.id = 'sentinel-guide-css';
+    style.textContent = `
+/* ── Guide button in header ───────────────────── */
+#sentinel-guide-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 30px; padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: var(--text-2);
+  font-size: 12px; font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background .13s, color .13s, border-color .13s;
+  white-space: nowrap;
+}
+#sentinel-guide-btn:hover {
+  background: var(--bg-hover); color: var(--text); border-color: var(--border);
+}
+#sentinel-guide-btn.guide-open {
+  background: var(--accent-dim);
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+
+/* ── Panel overlay backdrop ───────────────────── */
+#gd-backdrop {
+  position: fixed; inset: 0; z-index: 80;
+  background: rgba(0,0,0,.18);
+  animation: gdFadeIn .18s ease both;
+}
+@keyframes gdFadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* ── Guide panel ──────────────────────────────── */
+.gd-panel {
+  position: fixed;
+  top: 44px; right: 0; bottom: 0;
+  width: min(340px, calc(100vw - 40px));
+  z-index: 81;
+  display: flex; flex-direction: column;
+  background: var(--bg-card);
+  border-left: 1px solid var(--border);
+  box-shadow: -4px 0 24px rgba(0,0,0,.12);
+  animation: gdSlideIn .22s cubic-bezier(.4,0,.2,1) both;
+  overflow: hidden;
+}
+@keyframes gdSlideIn {
+  from { transform: translateX(100%); opacity: .6; }
+  to   { transform: translateX(0);   opacity: 1; }
+}
+
+/* ── Header ───────────────────────────────────── */
+.gd-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 11px 14px;
+  background: var(--bg-panel);
+  border-bottom: 2px solid var(--accent-bright);
+  flex-shrink: 0;
+}
+.gd-header-title {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px; font-weight: 700; color: var(--text);
+  letter-spacing: .02em;
+}
+.gd-close {
+  width: 26px; height: 26px;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg-input); color: var(--text-3);
+  font-size: 11px; cursor: pointer;
+  transition: all .12s;
+}
+.gd-close:hover { background: var(--crit-bg); color: var(--crit); border-color: var(--crit-b); }
+
+/* ── Tabs ─────────────────────────────────────── */
+.gd-tabs {
+  display: flex; border-bottom: 1px solid var(--border-dim);
+  flex-shrink: 0; overflow-x: auto; scrollbar-width: none;
+  background: var(--bg-panel);
+}
+.gd-tabs::-webkit-scrollbar { display: none; }
+.gd-tab {
+  flex: 1; min-width: max-content;
+  padding: 8px 10px;
+  font-size: 11px; font-weight: 500;
+  color: var(--text-2);
+  background: transparent; border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer; font-family: inherit;
+  transition: all .12s; white-space: nowrap;
+}
+.gd-tab:hover { color: var(--text); background: var(--bg-hover); }
+.gd-tab.active {
+  color: var(--accent); border-bottom-color: var(--accent-bright);
+  font-weight: 600; background: var(--bg-card);
+}
+
+/* ── Body ─────────────────────────────────────── */
+.gd-body {
+  flex: 1; overflow-y: auto;
+  padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.gd-body::-webkit-scrollbar { width: 4px; }
+.gd-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ── Section ──────────────────────────────────── */
+.gd-section {
+  border: 1px solid var(--border-dim);
+  border-radius: 8px;
+  background: var(--bg-input);
+  overflow: hidden;
+}
+.gd-section-hdr {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 11px;
+  background: transparent; border: none;
+  cursor: pointer; width: 100%; text-align: left;
+  font-family: inherit;
+  transition: background .1s;
+  -webkit-user-select: none; user-select: none;
+}
+.gd-section-hdr:hover { background: var(--bg-hover); }
+.gd-section-hdr.open { background: var(--accent-dim); border-bottom: 1px solid var(--accent-border); }
+.gd-section-name {
+  flex: 1; font-size: 12px; font-weight: 600; color: var(--text);
+}
+.gd-caret {
+  font-size: 8px; color: var(--text-3);
+  transition: transform .15s; flex-shrink: 0;
+}
+.gd-caret.open { transform: rotate(90deg); color: var(--accent); }
+.gd-section-body {
+  flex-direction: column; gap: 7px;
+  padding: 10px 12px;
+  animation: gdFadeIn .15s ease both;
+  border-top: 1px solid var(--border-dim);
+  background: var(--bg-card);
+}
+.gd-section-body code {
+  font-family: var(--mono); font-size: 11px;
+  background: var(--bg-input); padding: 1px 5px;
+  border-radius: 4px; color: var(--accent);
+  border: 1px solid var(--border);
+}
+    `;
+    document.head.appendChild(style);
   }
 
-  function removeGuidePanel() {
-    const existing = document.getElementById('sentinel-guide-panel');
-    if (existing) existing.remove();
-    updateWorkspaceClass();
+  // ── DOM ──────────────────────────────────────────────────────────────────────
+
+  function removePanel() {
+    document.getElementById('sentinel-guide-panel')?.remove();
+    document.getElementById('gd-backdrop')?.remove();
+    document.body.classList.remove('guide-visible');
   }
 
-  function mountGuidePanel() {
-    removeGuidePanel();
-    const ws = document.querySelector('.workspace');
-    if (!ws) return;
+  function mountPanel() {
+    removePanel();
+    injectStyles();
+
+    // Backdrop
+    const backdrop = document.createElement('div');
+    backdrop.id = 'gd-backdrop';
+    backdrop.addEventListener('click', () => { guideOpen = false; removePanel(); updateBtn(); });
+    document.body.appendChild(backdrop);
+
+    // Panel
     const div = document.createElement('div');
-    div.innerHTML = renderGuidePanel();
+    div.innerHTML = renderPanel();
     const panel = div.firstElementChild;
-    ws.appendChild(panel);
-    updateWorkspaceClass();
-    bindPanelEvents(panel);
-  }
+    document.body.appendChild(panel);
+    document.body.classList.add('guide-visible');
 
-  function refreshGuideBody() {
-    const body = document.getElementById('guide-body');
-    if (!body) return;
-    body.innerHTML = renderTabContent();
-    bindSectionEvents(body);
-  }
-
-  function bindSectionEvents(container) {
-    container.querySelectorAll('.guide-section-hdr').forEach(hdr => {
-      hdr.addEventListener('click', (e) => {
-        e.preventDefault();
-        const key = hdr.dataset.key;
-        const isOpen = !hdr.classList.contains('open');
-        sectionState[key] = isOpen;
-        
-        hdr.classList.toggle('open', isOpen);
-        const caret = hdr.querySelector('.guide-section-caret');
-        if (caret) caret.classList.toggle('open', isOpen);
-        
-        const body = hdr.nextElementSibling;
-        if (body && body.classList.contains('guide-section-body')) {
-          body.style.display = isOpen ? 'flex' : 'none';
-          if (isOpen) {
-            body.style.animation = 'none';
-            body.offsetHeight; // trigger reflow
-            body.style.animation = null;
-          }
-        }
-      });
-    });
-  }
-
-  function bindPanelEvents(panel) {
-    // Close button
-    panel.querySelector('#guide-close-btn').addEventListener('click', () => {
-      guideOpen = false;
-      removeGuidePanel();
-      updateGuideBtn();
+    // Close
+    panel.querySelector('#gd-close-btn').addEventListener('click', () => {
+      guideOpen = false; removePanel(); updateBtn();
     });
 
     // Tabs
-    panel.querySelector('#guide-tabs').addEventListener('click', e => {
-      const btn = e.target.closest('.guide-tab');
+    panel.querySelector('#gd-tabs').addEventListener('click', e => {
+      const btn = e.target.closest('.gd-tab');
       if (!btn) return;
       activeTab = parseInt(btn.dataset.tab, 10);
-      // Re-render tabs active state
-      panel.querySelectorAll('.guide-tab').forEach((t, i) => {
-        t.classList.toggle('active', i === activeTab);
-      });
-      refreshGuideBody();
+      panel.querySelectorAll('.gd-tab').forEach((t, i) => t.classList.toggle('active', i === activeTab));
+      const body = panel.querySelector('#gd-body');
+      if (body) { body.innerHTML = renderBody(); bindSections(body); }
     });
 
-    // Sections (initial bind)
-    bindSectionEvents(panel.querySelector('#guide-body'));
+    bindSections(panel.querySelector('#gd-body'));
   }
 
-  // ── Guide button in header ──────────────────────────────────────────────────
+  function bindSections(container) {
+    if (!container) return;
+    container.querySelectorAll('.gd-section-hdr').forEach(hdr => {
+      hdr.addEventListener('click', () => {
+        const key = hdr.dataset.key;
+        const isOpen = !hdr.classList.contains('open');
+        openSections[key] = isOpen;
+        hdr.classList.toggle('open', isOpen);
+        const caret = hdr.querySelector('.gd-caret');
+        if (caret) caret.classList.toggle('open', isOpen);
+        const body = hdr.nextElementSibling;
+        if (body) body.style.display = isOpen ? 'flex' : 'none';
+      });
+    });
+  }
 
-  function updateGuideBtn() {
+  function updateBtn() {
     const btn = document.getElementById('sentinel-guide-btn');
     if (!btn) return;
-    if (guideOpen) {
-      btn.classList.add('guide-open');
-      btn.innerHTML = '<span class="guide-btn-icon">📖</span> Đóng hướng dẫn';
-    } else {
-      btn.classList.remove('guide-open');
-      btn.innerHTML = '<span class="guide-btn-icon">📖</span> Hướng dẫn';
-    }
+    btn.classList.toggle('guide-open', guideOpen);
+    btn.innerHTML = guideOpen
+      ? '<span>📖</span> Đóng hướng dẫn'
+      : '<span>📖</span> Hướng dẫn';
   }
 
-  function injectGuideButton() {
-    // Wait for header-gap to exist
+  function injectBtn() {
     const headerGap = document.querySelector('.header-gap');
     if (!headerGap || document.getElementById('sentinel-guide-btn')) return;
-
     const btn = document.createElement('button');
     btn.id = 'sentinel-guide-btn';
-    btn.className = 'btn-guide';
-    btn.innerHTML = '<span class="guide-btn-icon">📖</span> Hướng dẫn';
+    btn.type = 'button';
+    btn.innerHTML = '<span>📖</span> Hướng dẫn';
     btn.title = 'Mở / đóng bảng hướng dẫn sử dụng';
-    btn.style.marginRight = '8px';
-
     btn.addEventListener('click', () => {
       guideOpen = !guideOpen;
-      if (guideOpen) {
-        mountGuidePanel();
-      } else {
-        removeGuidePanel();
-      }
-      updateGuideBtn();
+      guideOpen ? mountPanel() : removePanel();
+      updateBtn();
     });
-
     headerGap.insertAdjacentElement('afterend', btn);
   }
 
-  // ── Bootstrap ───────────────────────────────────────────────────────────────
-
-  function init() {
-    injectGuideButton();
-    const observer = new MutationObserver(() => {
-      if (guideOpen && !document.getElementById('sentinel-guide-panel')) {
-        mountGuidePanel();
-      }
-    });
-    const root = document.getElementById('root');
-    if (root) observer.observe(root, { childList: true, subtree: true });
-  }
-
-  // Retry injection until React has rendered the app-header
-  let attempts = 0;
-  const interval = setInterval(() => {
-    attempts++;
-    if (document.querySelector('.header-gap')) {
-      clearInterval(interval);
-      init();
-    }
-    if (attempts > 100) clearInterval(interval);
+  // Bootstrap
+  let tries = 0;
+  const iv = setInterval(() => {
+    tries++;
+    if (document.querySelector('.header-gap')) { clearInterval(iv); injectBtn(); injectStyles(); }
+    if (tries > 100) clearInterval(iv);
   }, 100);
 
 })();

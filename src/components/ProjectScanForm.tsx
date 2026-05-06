@@ -1,6 +1,34 @@
 import React from 'react';
 import { useStore } from '../store/useStore';
 
+const SCOPE_CARDS = [
+  {
+    icon: '✓',
+    title: 'Thư viện & gói phần mềm',
+    desc: 'Kiểm tra gói npm/yarn có lỗ hổng CVE đã biết.',
+  },
+  {
+    icon: '✓',
+    title: 'Mật khẩu & khoá bí mật',
+    desc: 'Phát hiện API key, token bị nhúng cứng trong code.',
+  },
+  {
+    icon: '✓',
+    title: 'File cấu hình & môi trường',
+    desc: 'Kiểm tra .env, config file có thông tin nhạy cảm.',
+  },
+  {
+    icon: '✓',
+    title: 'Pipeline CI/CD',
+    desc: 'Đánh giá bảo mật quy trình build và triển khai.',
+  },
+  {
+    icon: '✓',
+    title: 'Ghi log & xử lý lỗi',
+    desc: 'Phát hiện log ghi quá nhiều thông tin nhạy cảm.',
+  },
+];
+
 export const ProjectScanForm: React.FC = () => {
   const { selectedFolder, setSelectedFolder, performProjectScan, isLoading } = useStore();
 
@@ -9,69 +37,91 @@ export const ProjectScanForm: React.FC = () => {
     if (result?.ok && result.folderPath) setSelectedFolder(result.folderPath);
   };
 
-  const scopeItems = [
-    'Phụ thuộc npm/yarn (tra cứu CVE)',
-    'Bí mật hardcode và API key',
-    'File cấu hình và biến môi trường',
-    'Bảo mật pipeline CI/CD',
-    'Ghi log và xử lý lỗi',
-  ];
-
   return (
     <>
+      {/* ── Tip người mới ── */}
+      <div className="onboarding-tip">
+        <strong>Gợi ý:</strong> Chọn thư mục chứa mã nguồn chính của bạn
+        (ví dụ thư mục <code className="inline-code">src</code> hoặc thư mục gốc dự án).
+      </div>
+
+      {/* ── Chọn thư mục ── */}
       <div className="section">
-        <div className="section-label">Thư mục dự án</div>
-        <div className="quick-help-box">
-          Mẹo cho người mới: hãy quét thư mục source chính trước, sau đó quét lại toàn bộ dự án nếu cần.
-        </div>
+        <div className="section-label">Thư mục mã nguồn</div>
+
         <div className="field">
-          <label className="field-label">Thư mục mã nguồn</label>
-          <div style={{ display: 'flex', gap: 10, width: '100%' }}>
+          <label className="field-label" htmlFor="folder-path">Đường dẫn thư mục</label>
+          <div className="folder-select-row">
             <div className="input-clear-row">
               <input
+                id="folder-path"
                 type="text"
                 value={selectedFolder || ''}
                 readOnly
-                placeholder="Chưa chọn thư mục"
+                placeholder="Chưa chọn thư mục nào"
               />
               {selectedFolder && (
                 <button
                   type="button"
                   className="btn-clear"
-                  title="Xóa thư mục"
+                  title="Xoá thư mục đã chọn"
                   disabled={isLoading}
                   onClick={() => setSelectedFolder('')}
-                >
-                  ✕
-                </button>
+                >✕</button>
               )}
             </div>
-            <button className="btn-secondary" onClick={handleBrowse} disabled={isLoading} style={{ whiteSpace: 'nowrap' }}>
-              Chọn thư mục
+            <button
+              className="btn-browse"
+              onClick={handleBrowse}
+              disabled={isLoading}
+              type="button"
+            >
+              📁 Chọn thư mục
             </button>
           </div>
         </div>
       </div>
 
+      {/* ── Phạm vi phân tích ── */}
       <div className="section">
-        <div className="section-label">Phạm vi quét</div>
-        <ul className="scope-list">
-          {scopeItems.map((item, i) => (
-            <li key={i} className="scope-item">
-              <span className="scope-bullet" />
-              {item}
-            </li>
+        <div className="section-label">Những gì sẽ được kiểm tra</div>
+        <div className="scope-cards">
+          {SCOPE_CARDS.map((card, i) => (
+            <div key={i} className="scope-card">
+              <div className="scope-card-check">{card.icon}</div>
+              <div>
+                <div className="scope-card-title">{card.title}</div>
+                <div className="scope-card-desc">{card.desc}</div>
+              </div>
+            </div>
           ))}
-        </ul>
+        </div>
       </div>
 
-      <button
-        className="btn-primary"
-        onClick={performProjectScan}
-        disabled={isLoading || !selectedFolder}
-      >
-        {isLoading ? 'Đang quét...' : 'Quét dự án'}
-      </button>
+      {/* ── Sticky CTA ── */}
+      <div className="left-panel-cta">
+        <button
+          className="btn-primary"
+          onClick={performProjectScan}
+          disabled={isLoading || !selectedFolder}
+          title={!selectedFolder ? 'Vui lòng chọn thư mục trước khi phân tích' : 'Bắt đầu phân tích bảo mật (Ctrl+Enter)'}
+        >
+          {isLoading ? (
+            <><span className="spinner-sm" style={{ borderColor: 'rgba(42,54,59,.2)', borderTopColor: 'var(--text)' }} /> Đang phân tích…</>
+          ) : (
+            <>▶ Bắt đầu phân tích mã nguồn</>
+          )}
+        </button>
+        <p
+          className="form-hint-below"
+          style={{
+            visibility: selectedFolder || isLoading ? 'hidden' : 'visible',
+            minHeight: '15px'
+          }}
+        >
+          Chọn thư mục phía trên để kích hoạt nút phân tích
+        </p>
+      </div>
     </>
   );
 };

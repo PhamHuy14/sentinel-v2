@@ -1,30 +1,30 @@
 /**
- * Provider Metrics Tracker
+ * Provider Metrics Tracker (Trình theo dõi chỉ số của nhà cung cấp)
  *
- * Tracks per-provider: latency history, error counts, circuit-breaker state.
- * Used by providers and the router for health scoring and circuit-breaking.
+ * Theo dõi cho từng nhà cung cấp: lịch sử độ trễ, số lượng lỗi, trạng thái ngắt mạch (circuit-breaker).
+ * Được sử dụng bởi các nhà cung cấp và bộ định tuyến để đánh giá điểm sức khỏe và ngắt mạch.
  */
 
-import { ProviderHealth } from './types.js';
+import { ProviderHealth } from './types';
 
 interface ProviderState {
-  /** Total calls made */
+  /** Tổng số lệnh gọi đã thực hiện */
   totalCalls: number;
-  /** Running sum of successful call latencies */
+  /** Tổng cộng độ trễ của các lệnh gọi thành công */
   successLatencySum: number;
-  /** Count of successful calls */
+  /** Số lượng lệnh gọi thành công */
   successCount: number;
-  /** Recent window of outcomes: true=success, false=failure */
+  /** Cửa sổ theo dõi kết quả gần đây: true=thành công, false=thất bại */
   recentWindow: boolean[];
-  /** Consecutive failure count for circuit breaker */
+  /** Số lần thất bại liên tiếp dùng cho ngắt mạch */
   consecutiveFailures: number;
-  /** Whether circuit breaker is open */
+  /** Trạng thái mạch có đang mở (ngắt) hay không */
   circuitOpen: boolean;
-  /** Timestamp when circuit was opened */
+  /** Dấu thời gian khi mạch bị mở (ngắt) */
   circuitOpenAt: number;
 }
 
-const WINDOW_SIZE = 20; // last N calls for error-rate calculation
+const WINDOW_SIZE = 20; // N lệnh gọi gần nhất để tính toán tỷ lệ lỗi
 
 export class ProviderMetricsTracker {
   private readonly states = new Map<string, ProviderState>();
@@ -57,7 +57,7 @@ export class ProviderMetricsTracker {
     s.successCount++;
     s.successLatencySum += latencyMs;
     s.consecutiveFailures = 0;
-    // Auto-close circuit on success
+    // Tự động đóng mạch (circuit) khi thành công
     if (s.circuitOpen) s.circuitOpen = false;
     s.recentWindow.push(true);
     if (s.recentWindow.length > WINDOW_SIZE) s.recentWindow.shift();
@@ -70,7 +70,7 @@ export class ProviderMetricsTracker {
     s.recentWindow.push(false);
     if (s.recentWindow.length > WINDOW_SIZE) s.recentWindow.shift();
 
-    // Trip circuit breaker
+    // Kích hoạt ngắt mạch (circuit breaker)
     if (s.consecutiveFailures >= this.circuitBreakerThreshold) {
       s.circuitOpen = true;
       s.circuitOpenAt = Date.now();
@@ -78,14 +78,14 @@ export class ProviderMetricsTracker {
   }
 
   /**
-   * Returns current health for a provider.
-   * @param id - provider id
-   * @param noKey - if true, provider has no API key → mark as unavailable
+   * Trả về sức khỏe hiện tại của một nhà cung cấp.
+   * @param id - id của nhà cung cấp
+   * @param noKey - nếu true, nhà cung cấp không có API key → đánh dấu là không khả dụng
    */
   getHealth(id: string, noKey = false): ProviderHealth {
     const s = this.getOrCreate(id);
 
-    // Auto-reset circuit after cooldown
+    // Tự động thiết lập lại mạch (circuit) sau thời gian chờ (cooldown)
     if (s.circuitOpen && Date.now() - s.circuitOpenAt > this.circuitResetMs) {
       s.circuitOpen = false;
       s.consecutiveFailures = 0;
@@ -101,22 +101,22 @@ export class ProviderMetricsTracker {
 
     const avgLatencyMs = s.successCount > 0
       ? s.successLatencySum / s.successCount
-      : 3_000; // assume 3s if no data yet
+      : 3_000; // giả định 3s nếu chưa có dữ liệu
 
-    // Health score: penalise error rate and latency
-    const latencyPenalty = Math.min(1, avgLatencyMs / 15_000); // 15s = max bad
+    // Điểm sức khỏe: phạt dựa trên tỷ lệ lỗi và độ trễ
+    const latencyPenalty = Math.min(1, avgLatencyMs / 15_000); // 15s = cực kỳ tệ
     const score = Math.max(0, 1 - recentErrorRate * 0.6 - latencyPenalty * 0.4);
 
     return {
       score,
-      remainingQuota: s.circuitOpen ? 0 : 1, // abstract; quota is in estimateCostOrQuota
+      remainingQuota: s.circuitOpen ? 0 : 1, // trừu tượng; hạn mức nằm trong estimateCostOrQuota
       avgLatencyMs,
       recentErrorRate,
       circuitOpen: s.circuitOpen,
     };
   }
 
-  /** Returns true if the circuit is currently open (and cooldown not expired). */
+  /** Trả về true nếu mạch (circuit) hiện đang mở (và chưa hết thời gian chờ). */
   isCircuitOpen(id: string): boolean {
     const s = this.states.get(id);
     if (!s) return false;
@@ -127,7 +127,7 @@ export class ProviderMetricsTracker {
     return s.circuitOpen;
   }
 
-  /** Snapshot of all provider states (for observability). */
+  /** Ảnh chụp nhanh (Snapshot) trạng thái tất cả các nhà cung cấp (dành cho mục đích quan sát/log). */
   snapshot(): Record<string, ProviderHealth & { totalCalls: number }> {
     const result: Record<string, ProviderHealth & { totalCalls: number }> = {};
     for (const [id, s] of this.states) {

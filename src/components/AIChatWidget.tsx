@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AIChatMessage, genMsgId, INPUT_PLACEHOLDER_HINTS, routeQuery } from '../ai/aiRouter';
+import { AIChatMessage, AiQueryPayload, genMsgId, HISTORY_TURNS, INPUT_PLACEHOLDER_HINTS, routeQuery } from '../ai/aiRouter';
+import { getOrchestrator } from '../ai/llm/hybridOrchestrator.js';
 import { useAIStore } from '../store/useAIStore';
 import { useStore } from '../store/useStore';
+
+// Mở rộng AIChatMessage để mang theo thông tin debug provider
+interface ExtendedAIChatMessage extends AIChatMessage {
+  warnings?: string[];
+  providersTried?: string[];
+  latencyMs?: number;
+}
 
 // ── Bộ render Markdown ────────────────────────────────────────────────────────
 function renderMd(raw: string): string {
@@ -110,66 +118,66 @@ function renderMd(raw: string): string {
 // ── Câu hỏi gợi ý nhanh (bổ sung thêm nhiều chủ đề) ──────────────────────────
 const QUICK_QS = [
   // 🛡️ Công cụ
-  { label: 'Sentinel là gì?',       q: 'SENTINEL là gì?',                    category: '🛡️ Công cụ' },
-  { label: 'URL Scan',               q: 'URL Scan là gì và dùng thế nào?',    category: '🛡️ Công cụ' },
-  { label: 'Project Scan',           q: 'Project Scan hoạt động như thế nào?', category: '🛡️ Công cụ' },
-  { label: 'Crawl Depth',            q: 'Crawl Depth là gì?',                 category: '🛡️ Công cụ' },
-  { label: 'Request Budget',         q: 'Request Budget là gì?',              category: '🛡️ Công cụ' },
-  { label: 'Xác thực',               q: 'Cách thêm Authentication khi scan?', category: '🛡️ Công cụ' },
-  { label: 'Xuất báo cáo',           q: 'Cách export báo cáo?',               category: '🛡️ Công cụ' },
-  { label: 'Lịch sử scan',           q: 'Cách xem lịch sử scan?',             category: '🛡️ Công cụ' },
-  { label: 'Collector',              q: 'Collector trong Findings là gì?',    category: '🛡️ Công cụ' },
-  { label: 'False positive',         q: 'Khi nào findings có thể là false positive?', category: '🛡️ Công cụ' },
-  { label: 'Risk Score',             q: 'Risk Score được tính như thế nào?',  category: '🛡️ Công cụ' },
-  { label: 'Checklist',              q: 'Tab Checklist dùng để làm gì?',      category: '🛡️ Công cụ' },
-  { label: 'Scan chậm?',             q: 'Tại sao scan chạy chậm?',            category: '🛡️ Công cụ' },
+  { label: 'Sentinel là gì?',       q: 'SENTINEL là gì?',                    category: 'Công cụ' },
+  { label: 'URL Scan',               q: 'URL Scan là gì và dùng thế nào?',    category: 'Công cụ' },
+  { label: 'Project Scan',           q: 'Project Scan hoạt động như thế nào?', category: 'Công cụ' },
+  { label: 'Crawl Depth',            q: 'Crawl Depth là gì?',                 category: 'Công cụ' },
+  { label: 'Request Budget',         q: 'Request Budget là gì?',              category: 'Công cụ' },
+  { label: 'Xác thực',               q: 'Cách thêm Authentication khi scan?', category: 'Công cụ' },
+  { label: 'Xuất báo cáo',           q: 'Cách export báo cáo?',               category: 'Công cụ' },
+  { label: 'Lịch sử scan',           q: 'Cách xem lịch sử scan?',             category: 'Công cụ' },
+  { label: 'Collector',              q: 'Collector trong Findings là gì?',    category: 'Công cụ' },
+  { label: 'False positive',         q: 'Khi nào findings có thể là false positive?', category: 'Công cụ' },
+  { label: 'Risk Score',             q: 'Risk Score được tính như thế nào?',  category: 'Công cụ' },
+  { label: 'Checklist',              q: 'Tab Checklist dùng để làm gì?',      category: 'Công cụ' },
+  { label: 'Scan chậm?',             q: 'Tại sao scan chạy chậm?',            category: 'Công cụ' },
   // 🔴 Lỗ hổng
-  { label: 'SQL Injection',          q: 'SQL Injection là gì và cách fix?',   category: '🔴 Lỗ hổng' },
-  { label: 'XSS',                    q: 'XSS là gì và cách fix?',             category: '🔴 Lỗ hổng' },
-  { label: 'CSRF',                   q: 'CSRF là gì và cách fix?',            category: '🔴 Lỗ hổng' },
-  { label: 'CORS',                   q: 'CORS misconfiguration là gì?',       category: '🔴 Lỗ hổng' },
-  { label: 'JWT',                    q: 'JWT và các lỗi thường gặp?',         category: '🔴 Lỗ hổng' },
-  { label: 'SSRF',                   q: 'SSRF là gì?',                        category: '🔴 Lỗ hổng' },
-  { label: 'SSTI',                   q: 'SSTI là gì và cách fix?',            category: '🔴 Lỗ hổng' },
-  { label: 'IDOR',                   q: 'IDOR là gì?',                        category: '🔴 Lỗ hổng' },
-  { label: 'Path Traversal',         q: 'Path Traversal là gì?',              category: '🔴 Lỗ hổng' },
-  { label: 'Clickjacking',           q: 'Clickjacking là gì?',                category: '🔴 Lỗ hổng' },
-  { label: 'Open Redirect',          q: 'Open Redirect là gì?',               category: '🔴 Lỗ hổng' },
-  { label: 'Command Injection',      q: 'Command Injection là gì?',           category: '🔴 Lỗ hổng' },
-  { label: 'XXE Injection',          q: 'XXE là gì?',                         category: '🔴 Lỗ hổng' },
-  { label: 'BOLA / API IDOR',        q: 'BOLA/API IDOR là gì?',               category: '🔴 Lỗ hổng' },
-  { label: 'File Upload',            q: 'Lỗ hổng File Upload là gì?',         category: '🔴 Lỗ hổng' },
-  { label: 'GraphQL Security',       q: 'GraphQL có các lỗ hổng bảo mật nào?', category: '🔴 Lỗ hổng' },
-  { label: 'WebSocket Security',     q: 'WebSocket có các lỗ hổng bảo mật nào?', category: '🔴 Lỗ hổng' },
+  { label: 'SQL Injection',          q: 'SQL Injection là gì và cách fix?',   category: 'Lỗ hổng' },
+  { label: 'XSS',                    q: 'XSS là gì và cách fix?',             category: 'Lỗ hổng' },
+  { label: 'CSRF',                   q: 'CSRF là gì và cách fix?',            category: 'Lỗ hổng' },
+  { label: 'CORS',                   q: 'CORS misconfiguration là gì?',       category: 'Lỗ hổng' },
+  { label: 'JWT',                    q: 'JWT và các lỗi thường gặp?',         category: 'Lỗ hổng' },
+  { label: 'SSRF',                   q: 'SSRF là gì?',                        category: 'Lỗ hổng' },
+  { label: 'SSTI',                   q: 'SSTI là gì và cách fix?',            category: 'Lỗ hổng' },
+  { label: 'IDOR',                   q: 'IDOR là gì?',                        category: 'Lỗ hổng' },
+  { label: 'Path Traversal',         q: 'Path Traversal là gì?',              category: 'Lỗ hổng' },
+  { label: 'Clickjacking',           q: 'Clickjacking là gì?',                category: 'Lỗ hổng' },
+  { label: 'Open Redirect',          q: 'Open Redirect là gì?',               category: 'Lỗ hổng' },
+  { label: 'Command Injection',      q: 'Command Injection là gì?',           category: 'Lỗ hổng' },
+  { label: 'XXE Injection',          q: 'XXE là gì?',                         category: 'Lỗ hổng' },
+  { label: 'BOLA / API IDOR',        q: 'BOLA/API IDOR là gì?',               category: 'Lỗ hổng' },
+  { label: 'File Upload',            q: 'Lỗ hổng File Upload là gì?',         category: 'Lỗ hổng' },
+  { label: 'GraphQL Security',       q: 'GraphQL có các lỗ hổng bảo mật nào?', category: 'Lỗ hổng' },
+  { label: 'WebSocket Security',     q: 'WebSocket có các lỗ hổng bảo mật nào?', category: 'Lỗ hổng' },
   // ✅ Thực hành
-  { label: 'Security Headers',       q: 'Security Headers là gì?',            category: '✅ Thực hành' },
-  { label: 'Hardcoded Secrets',      q: 'SENTINEL tìm secrets hardcode như thế nào?', category: '✅ Thực hành' },
-  { label: 'Rate Limiting',          q: 'Rate Limiting và Brute Force Protection là gì?', category: '✅ Thực hành' },
-  { label: 'Password Security',      q: 'Cách lưu mật khẩu an toàn?',        category: '✅ Thực hành' },
-  { label: 'API Security',           q: 'Các lỗ hổng bảo mật API phổ biến?', category: '✅ Thực hành' },
-  { label: 'Session Management',     q: 'Session Management an toàn như thế nào?', category: '✅ Thực hành' },
-  { label: 'Subresource Integrity',  q: 'Subresource Integrity (SRI) là gì?', category: '✅ Thực hành' },
-  { label: 'Docker Security',        q: 'Các lỗi bảo mật Docker phổ biến?',  category: '✅ Thực hành' },
-  { label: 'Env Config',             q: 'Cách quản lý configuration và biến môi trường an toàn?', category: '✅ Thực hành' },
-  { label: '2FA / MFA',              q: '2FA/MFA là gì và tại sao quan trọng?', category: '✅ Thực hành' },
-  { label: 'OAuth 2.0',              q: 'OAuth 2.0 và các lỗ hổng thường gặp?', category: '✅ Thực hành' },
-  { label: 'Sensitive Data',         q: 'Sensitive Data Exposure là gì?',     category: '✅ Thực hành' },
+  { label: 'Security Headers',       q: 'Security Headers là gì?',            category: 'Thực hành' },
+  { label: 'Hardcoded Secrets',      q: 'SENTINEL tìm secrets hardcode như thế nào?', category: 'Thực hành' },
+  { label: 'Rate Limiting',          q: 'Rate Limiting và Brute Force Protection là gì?', category: 'Thực hành' },
+  { label: 'Password Security',      q: 'Cách lưu mật khẩu an toàn?',        category: 'Thực hành' },
+  { label: 'API Security',           q: 'Các lỗ hổng bảo mật API phổ biến?', category: 'Thực hành' },
+  { label: 'Session Management',     q: 'Session Management an toàn như thế nào?', category: 'Thực hành' },
+  { label: 'Subresource Integrity',  q: 'Subresource Integrity (SRI) là gì?', category: 'Thực hành' },
+  { label: 'Docker Security',        q: 'Các lỗi bảo mật Docker phổ biến?',  category: 'Thực hành' },
+  { label: 'Env Config',             q: 'Cách quản lý configuration và biến môi trường an toàn?', category: 'Thực hành' },
+  { label: '2FA / MFA',              q: '2FA/MFA là gì và tại sao quan trọng?', category: 'Thực hành' },
+  { label: 'OAuth 2.0',              q: 'OAuth 2.0 và các lỗ hổng thường gặp?', category: 'Thực hành' },
+  { label: 'Sensitive Data',         q: 'Sensitive Data Exposure là gì?',     category: 'Thực hành' },
   // 📋 OWASP
-  { label: 'OWASP Top 10',           q: 'OWASP Top 10 là gì?',               category: '📋 OWASP' },
-  { label: 'A01 – Access Control',   q: 'A01 Broken Access Control là gì?',  category: '📋 OWASP' },
-  { label: 'A02 – Cryptography',     q: 'A02 Cryptographic Failures là gì?', category: '📋 OWASP' },
-  { label: 'A03 – Injection',        q: 'A03 Injection là gì?',              category: '📋 OWASP' },
-  { label: 'A04 – Insecure Design',  q: 'A04 Insecure Design là gì?',        category: '📋 OWASP' },
-  { label: 'A05 – Misconfig',        q: 'A05 Security Misconfiguration là gì?', category: '📋 OWASP' },
-  { label: 'A06 – Components',       q: 'A06 Vulnerable Components là gì?',  category: '📋 OWASP' },
-  { label: 'A07 – Auth Failures',    q: 'A07 Auth & Session Failures là gì?', category: '📋 OWASP' },
-  { label: 'A08 – Integrity',        q: 'A08 Software Integrity Failures là gì?', category: '📋 OWASP' },
-  { label: 'A09 – Logging',          q: 'A09 Security Logging Failures là gì?', category: '📋 OWASP' },
-  { label: 'A10 – SSRF',             q: 'A10 SSRF là gì?',                   category: '📋 OWASP' },
-  { label: 'Pentest vs Scan',        q: 'Pentest và Vulnerability Scanning khác nhau như thế nào?', category: '📋 OWASP' },
+  { label: 'OWASP Top 10',           q: 'OWASP Top 10 là gì?',               category: 'OWASP' },
+  { label: 'A01 – Access Control',   q: 'A01 Broken Access Control là gì?',  category: 'OWASP' },
+  { label: 'A02 – Cryptography',     q: 'A02 Cryptographic Failures là gì?', category: 'OWASP' },
+  { label: 'A03 – Injection',        q: 'A03 Injection là gì?',              category: 'OWASP' },
+  { label: 'A04 – Insecure Design',  q: 'A04 Insecure Design là gì?',        category: 'OWASP' },
+  { label: 'A05 – Misconfig',        q: 'A05 Security Misconfiguration là gì?', category: 'OWASP' },
+  { label: 'A06 – Components',       q: 'A06 Vulnerable Components là gì?',  category: 'OWASP' },
+  { label: 'A07 – Auth Failures',    q: 'A07 Auth & Session Failures là gì?', category: 'OWASP' },
+  { label: 'A08 – Integrity',        q: 'A08 Software Integrity Failures là gì?', category: 'OWASP' },
+  { label: 'A09 – Logging',          q: 'A09 Security Logging Failures là gì?', category: 'OWASP' },
+  { label: 'A10 – SSRF',             q: 'A10 SSRF là gì?',                   category: 'OWASP' },
+  { label: 'Pentest vs Scan',        q: 'Pentest và Vulnerability Scanning khác nhau như thế nào?', category: 'OWASP' },
 ];
 
-const CATEGORIES = ['🛡️ Công cụ', '🔴 Lỗ hổng', '✅ Thực hành', '📋 OWASP'];
+const CATEGORIES = ['Công cụ', 'Lỗ hổng', 'Thực hành', 'OWASP'];
 
 // ── Các icon SVG ──────────────────────────────────────────────────────────────
 const IconShield = () => (
@@ -190,6 +198,11 @@ const IconTrash = () => (
 const IconSend = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
     <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+  </svg>
+);
+const IconStop = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+    <rect x="6" y="6" width="12" height="12" rx="2" ry="2"/>
   </svg>
 );
 const IconLightbulb = ({ active }: { active: boolean }) => (
@@ -224,12 +237,8 @@ const UserAvatar = () => (
 );
 
 // ── Độ trễ gõ chữ mô phỏng theo độ dài câu trả lời ────────────────────────────
-function getTypingDelay(answer: string): number {
-  const len = answer.length;
-  if (len > 1500) return 700 + Math.random() * 300;
-  if (len > 800)  return 500 + Math.random() * 200;
-  if (len > 400)  return 350 + Math.random() * 150;
-  return 220 + Math.random() * 120;
+function getTypingDelay(_answer: string): number {
+  return 120 + Math.random() * 80;
 }
 
 // ── Hook xoay vòng placeholder ────────────────────────────────────────────────
@@ -265,7 +274,60 @@ function copyText(text: string) {
   });
 }
 
-// ── Chip gợi ý khi mới mở khung chat ──────────────────────────────────────────
+function hasConfiguredLlmProvider(): boolean {
+  const env = (import.meta as unknown as { env?: Record<string, string> }).env ?? {};
+  return Boolean(
+    env.VITE_OPENROUTER_API_KEY ||
+    env.VITE_GEMINI_API_KEY ||
+    env.VITE_GROQ_API_KEY ||
+    env.VITE_TOGETHER_API_KEY ||
+    env.VITE_HF_API_KEY
+  );
+}
+
+interface ResolvedAssistantAnswer {
+  answer: string;
+  llmStatus: 'online' | 'offline';
+  providerUsed?: string;
+  source?: 'knowledge_base' | 'llm' | 'synthesized';
+  warnings?: string[];
+  providersTried?: string[];
+  latencyMs?: number;
+}
+
+async function resolveAssistantAnswer(payload: AiQueryPayload): Promise<ResolvedAssistantAnswer> {
+  try {
+    const response = await getOrchestrator().orchestrate(payload);
+    // eslint-disable-next-line no-console
+    console.info('[SENTINEL_AI_PROVIDER]', {
+      providerUsed: response.providerUsed,
+      source: response.source,
+      confidence: response.confidence,
+      warnings: response.warnings,
+    });
+    const llmStatus = hasConfiguredLlmProvider() ? 'online' : 'offline';
+    return {
+      answer: response.answer,
+      llmStatus,
+      providerUsed: response.providerUsed,
+      source: response.source,
+      warnings: response.warnings,
+      providersTried: response.providersTried,
+      latencyMs: response.latencyMs,
+    };
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') throw err;
+    return {
+      answer: routeQuery(payload),
+      llmStatus: 'offline',
+      providerUsed: 'knowledge_base',
+      source: 'knowledge_base',
+      warnings: [],
+      providersTried: [],
+    };
+  }
+}
+
 const WELCOME_CHIPS = [
   { label: 'Sentinel là gì?',    q: 'SENTINEL là gì?' },
   { label: 'URL Scan',           q: 'URL Scan là gì và dùng thế nào?' },
@@ -280,14 +342,17 @@ export function AIChatWidget() {
   const { isOpen, pendingFinding, setAIChatOpen, clearAIPendingFinding, fabMode, cycleAIFabMode } = useAIStore();
   const { urlScanResult, projectScanResult } = useStore();
 
-  const [messages, setMessages]               = useState<AIChatMessage[]>([]);
+  const [messages, setMessages]               = useState<ExtendedAIChatMessage[]>([]);
   const [input, setInput]                     = useState('');
   const [isTyping, setIsTyping]               = useState(false);
   const [unread, setUnread]                   = useState(0);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [activeCategory, setActiveCategory]   = useState(CATEGORIES[0]);
   const [inputFocused, setInputFocused]       = useState(false);
+  const [showFirstOpenTip, setShowFirstOpenTip] = useState(false);
   const [copiedMsgId, setCopiedMsgId]         = useState<string | null>(null);
+  const [, setLlmStatus]                      = useState<'online' | 'offline'>(hasConfiguredLlmProvider() ? 'online' : 'offline');
+  const [expandedDebugId, setExpandedDebugId] = useState<string | null>(null);
   // Từ khóa tìm kiếm trong panel gợi ý
   const [suggestionSearch, setSuggestionSearch] = useState('');
 
@@ -296,7 +361,9 @@ export function AIChatWidget() {
   const initializedRef       = useRef(false);
   const processingFindingRef = useRef<string | null>(null);
   const typingTimeoutRef     = useRef<number | null>(null);
-  const messagesRef          = useRef<AIChatMessage[]>([]);
+  const requestSeqRef        = useRef(0);
+  const abortControllerRef   = useRef<AbortController | null>(null);
+  const messagesRef          = useRef<ExtendedAIChatMessage[]>([]);
   // Lịch sử hội thoại để hiểu câu hỏi nối tiếp theo ngữ cảnh
   const conversationHistoryRef = useRef<{ role: 'user' | 'assistant'; content: string }[]>([]);
 
@@ -323,6 +390,17 @@ export function AIChatWidget() {
     if (isOpen) { setUnread(0); setTimeout(() => inputRef.current?.focus(), 150); }
   }, [isOpen]);
 
+  // Tip lần đầu mở (chỉ hiển thị một lần)
+  useEffect(() => {
+    if (!isOpen) return;
+    try {
+      const seen = localStorage.getItem('sentinel.ai.firstTipSeen') === '1';
+      if (!seen) setShowFirstOpenTip(true);
+    } catch {
+      setShowFirstOpenTip(true);
+    }
+  }, [isOpen]);
+
   // Chỉ tạo tin nhắn chào mừng một lần
   const ensureWelcome = useCallback(() => {
     if (initializedRef.current) return;
@@ -346,26 +424,90 @@ export function AIChatWidget() {
   const scheduleAssistantReply = useCallback((
     answer: string,
     userContent: string,
-    options?: { findingKey?: string; incrementUnread?: boolean },
+    options?: {
+      findingKey?: string;
+      incrementUnread?: boolean;
+      providerUsed?: string;
+      source?: 'knowledge_base' | 'llm' | 'synthesized';
+      warnings?: string[];
+      providersTried?: string[];
+      latencyMs?: number;
+    },
   ) => {
     clearTypingTimeout();
     setIsTyping(true);
     const delay = getTypingDelay(answer);
     typingTimeoutRef.current = window.setTimeout(() => {
-      const botMsg: AIChatMessage = { id: genMsgId(), role: 'assistant', content: answer, ts: Date.now() };
+      const botMsg: ExtendedAIChatMessage = {
+        id: genMsgId(),
+        role: 'assistant',
+        content: answer,
+        ts: Date.now(),
+        providerUsed: options?.providerUsed,
+        source: options?.source,
+        warnings: options?.warnings,
+        providersTried: options?.providersTried,
+        latencyMs: options?.latencyMs,
+      };
       setMessages(prev => [...prev, botMsg]);
       messagesRef.current = [...messagesRef.current, botMsg];
       conversationHistoryRef.current = [
         ...conversationHistoryRef.current,
         { role: 'user' as const, content: userContent },
         { role: 'assistant' as const, content: answer },
-      ].slice(-20);
+      ].slice(-HISTORY_TURNS);
       setIsTyping(false);
       if (options?.findingKey) processingFindingRef.current = null;
       if (options?.incrementUnread && !isOpen) setUnread(u => u + 1);
       typingTimeoutRef.current = null;
     }, delay);
   }, [clearTypingTimeout, isOpen]);
+
+  const finalizeAssistantReply = useCallback((
+    resolved: ResolvedAssistantAnswer,
+    userContent: string,
+    hasStreamed: boolean,
+    msgId: string,
+    options?: { findingKey?: string; incrementUnread?: boolean }
+  ) => {
+    if (hasStreamed) {
+      setMessages(prev => prev.map(m => m.id === msgId ? {
+        ...m,
+        content: resolved.answer,
+        providerUsed: resolved.providerUsed,
+        source: resolved.source,
+        warnings: resolved.warnings,
+        providersTried: resolved.providersTried,
+        latencyMs: resolved.latencyMs,
+      } : m));
+      messagesRef.current = messagesRef.current.map(m => m.id === msgId ? {
+        ...m,
+        content: resolved.answer,
+        providerUsed: resolved.providerUsed,
+        source: resolved.source,
+        warnings: resolved.warnings,
+        providersTried: resolved.providersTried,
+        latencyMs: resolved.latencyMs,
+      } : m);
+      conversationHistoryRef.current = [
+        ...conversationHistoryRef.current,
+        { role: 'user' as const, content: userContent },
+        { role: 'assistant' as const, content: resolved.answer },
+      ].slice(-HISTORY_TURNS);
+      if (options?.findingKey) processingFindingRef.current = null;
+      if (options?.incrementUnread && !isOpen) setUnread(u => u + 1);
+    } else {
+      scheduleAssistantReply(resolved.answer, userContent, {
+        findingKey: options?.findingKey,
+        incrementUnread: options?.incrementUnread,
+        providerUsed: resolved.providerUsed,
+        source: resolved.source,
+        warnings: resolved.warnings,
+        providersTried: resolved.providersTried,
+        latencyMs: resolved.latencyMs,
+      });
+    }
+  }, [isOpen, scheduleAssistantReply]);
 
   // Xử lý finding được gửi từ thẻ kết quả
   useEffect(() => {
@@ -398,18 +540,66 @@ export function AIChatWidget() {
       },
     };
 
-    const lastAsstMsg = [...messagesRef.current].reverse().find(m => m.role === 'assistant')?.content;
-    const answer = routeQuery({
-      question,
-      findingContext: findingCtx,
-      lastAssistantMessage: lastAsstMsg,
-      conversationHistory: conversationHistoryRef.current,
-    });
     const nextMessages = [...messagesRef.current, userMsg];
     messagesRef.current = nextMessages;
     setMessages(nextMessages);
-    scheduleAssistantReply(answer, question, { findingKey, incrementUnread: false });
-  }, [clearAIPendingFinding, ensureWelcome, pendingFinding, scheduleAssistantReply]);
+    setIsTyping(true);
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
+
+    const requestId = ++requestSeqRef.current;
+    
+    const msgId = genMsgId();
+    let hasStreamed = false;
+    let streamedContent = '';
+
+    const onToken = (token: string) => {
+      streamedContent += token;
+      if (!hasStreamed) {
+        hasStreamed = true;
+        setIsTyping(false);
+        const botMsg: ExtendedAIChatMessage = {
+          id: msgId, role: 'assistant', content: streamedContent, ts: Date.now()
+        };
+        setMessages(prev => [...prev, botMsg]);
+        messagesRef.current = [...messagesRef.current, botMsg];
+      } else {
+        setMessages(prev => prev.map(m => m.id === msgId ? { ...m, content: streamedContent } : m));
+        messagesRef.current = messagesRef.current.map(m => m.id === msgId ? { ...m, content: streamedContent } : m);
+      }
+    };
+
+    void (async () => {
+      let resolved: ResolvedAssistantAnswer;
+      try {
+        const lastAsstMsg = [...messagesRef.current].reverse().find(m => m.role === 'assistant')?.content;
+        resolved = await resolveAssistantAnswer({
+          question,
+          findingContext: findingCtx,
+          lastAssistantMessage: lastAsstMsg,
+          conversationHistory: conversationHistoryRef.current,
+          signal,
+          onToken,
+        });
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') return;
+        resolved = {
+          answer: routeQuery({
+            question,
+            findingContext: findingCtx,
+            conversationHistory: conversationHistoryRef.current,
+          }),
+          llmStatus: 'offline',
+        };
+      }
+      if (requestId !== requestSeqRef.current) return;
+      setLlmStatus(resolved.llmStatus);
+      finalizeAssistantReply(resolved, question, hasStreamed, msgId, { findingKey });
+    })();
+  }, [clearAIPendingFinding, ensureWelcome, pendingFinding, finalizeAssistantReply]);
 
   // Gửi câu hỏi mới
   const sendMessage = useCallback((question: string) => {
@@ -421,23 +611,83 @@ export function AIChatWidget() {
 
     const lastAsstMsg = [...messagesRef.current].reverse().find(m => m.role === 'assistant')?.content;
     const userMsg: AIChatMessage = { id: genMsgId(), role: 'user', content: trimmed, ts: Date.now() };
-    const answer = routeQuery({
-      question: trimmed,
-      lastAssistantMessage: lastAsstMsg,
-      conversationHistory: conversationHistoryRef.current,
-    });
     const nextMessages = [...messagesRef.current, userMsg];
     messagesRef.current = nextMessages;
     setMessages(nextMessages);
-    scheduleAssistantReply(answer, trimmed, { incrementUnread: true });
+    setIsTyping(true);
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
+
+    const requestId = ++requestSeqRef.current;
+
+    const msgId = genMsgId();
+    let hasStreamed = false;
+    let streamedContent = '';
+
+    const onToken = (token: string) => {
+      streamedContent += token;
+      if (!hasStreamed) {
+        hasStreamed = true;
+        setIsTyping(false);
+        const botMsg: ExtendedAIChatMessage = {
+          id: msgId, role: 'assistant', content: streamedContent, ts: Date.now()
+        };
+        setMessages(prev => [...prev, botMsg]);
+        messagesRef.current = [...messagesRef.current, botMsg];
+      } else {
+        setMessages(prev => prev.map(m => m.id === msgId ? { ...m, content: streamedContent } : m));
+        messagesRef.current = messagesRef.current.map(m => m.id === msgId ? { ...m, content: streamedContent } : m);
+      }
+    };
+
+    void (async () => {
+      let resolved: ResolvedAssistantAnswer;
+      try {
+        resolved = await resolveAssistantAnswer({
+          question: trimmed,
+          lastAssistantMessage: lastAsstMsg,
+          conversationHistory: conversationHistoryRef.current,
+          signal,
+          onToken,
+        });
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') return;
+        resolved = {
+          answer: routeQuery({
+            question: trimmed,
+            lastAssistantMessage: lastAsstMsg,
+            conversationHistory: conversationHistoryRef.current,
+          }),
+          llmStatus: 'offline',
+        };
+      }
+      if (requestId !== requestSeqRef.current) return;
+      setLlmStatus(resolved.llmStatus);
+      finalizeAssistantReply(resolved, trimmed, hasStreamed, msgId, { incrementUnread: true });
+    })();
     setInput('');
-  }, [ensureWelcome, isTyping, scheduleAssistantReply]);
+  }, [ensureWelcome, isTyping, finalizeAssistantReply]);
 
   const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); sendMessage(input); };
   const handleOpen   = () => { setAIChatOpen(true); ensureWelcome(); };
   const handleClose  = () => { setAIChatOpen(false); setShowSuggestions(false); };
-  const handleClear  = () => {
+  
+  const handleStop = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
     clearTypingTimeout();
+    setIsTyping(false);
+  }, [clearTypingTimeout]);
+
+  const handleClear  = () => {
+    handleStop();
+    requestSeqRef.current += 1;
+    setLlmStatus(hasConfiguredLlmProvider() ? 'online' : 'offline');
     initializedRef.current = false;
     conversationHistoryRef.current = [];
     messagesRef.current = [];
@@ -449,7 +699,13 @@ export function AIChatWidget() {
     setTimeout(() => ensureWelcome(), 50);
   };
 
-  useEffect(() => () => clearTypingTimeout(), [clearTypingTimeout]);
+  useEffect(() => () => {
+    requestSeqRef.current += 1;
+    clearTypingTimeout();
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+  }, [clearTypingTimeout]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Escape') {
@@ -524,12 +780,12 @@ export function AIChatWidget() {
                 <span className="ai-avatar-glow" />
               </div>
               <div>
-                <div className="ai-panel-name">Security Assistant</div>
+                <div className="ai-panel-name">Trợ lý bảo mật</div>
                 <div className="ai-panel-sub">
                   <span className="ai-online-dot" />
                   <span>Offline · Cơ sở tri thức OWASP</span>
                   {totalFindings > 0 && (
-                    <span className="ai-findings-badge">{totalFindings} findings</span>
+                    <span className="ai-findings-badge">{totalFindings} kết quả</span>
                   )}
                 </div>
               </div>
@@ -546,6 +802,23 @@ export function AIChatWidget() {
 
           {/* Danh sách tin nhắn */}
           <div className="ai-messages" id="ai-messages-list">
+            {showFirstOpenTip && !conversationStarted && !showSuggestions && !isTyping && (
+              <div className="onboarding-banner" style={{ margin: '8px 10px 6px' }}>
+                <div className="onboarding-banner-title">Mẹo nhanh</div>
+                <div className="onboarding-banner-text">
+                  Nhấn nút gợi ý để xem câu hỏi mẫu. Bạn cũng có thể nhấn “Hỏi AI” trong từng finding để xem phân tích chi tiết.
+                </div>
+                <button
+                  className="btn-link"
+                  onClick={() => {
+                    setShowFirstOpenTip(false);
+                    try { localStorage.setItem('sentinel.ai.firstTipSeen', '1'); } catch { /* ignore */ }
+                  }}
+                >
+                  Đã hiểu
+                </button>
+              </div>
+            )}
             {messages.map((msg, idx) => (
               <div
                 key={msg.id}
@@ -566,9 +839,38 @@ export function AIChatWidget() {
                     dangerouslySetInnerHTML={{ __html: renderMd(msg.content) }}
                   />
                   <div className="ai-bubble-footer">
+                    {msg.role === 'assistant' && msg.providerUsed && (
+                      <span
+                        className={`ai-bubble-provider ai-bubble-provider--${
+                          msg.providerUsed === 'knowledge_base' ? 'kb'
+                          : msg.providerUsed === 'fallback' ? 'fallback'
+                          : 'llm'
+                        }`}
+                      >
+                        {msg.providerUsed === 'knowledge_base' ? '◇ KB'
+                          : msg.providerUsed === 'fallback' ? '△ Offline'
+                          : `✦ ${msg.providerUsed}`}
+                        {msg.source && msg.source !== 'knowledge_base' && (
+                          <span className="ai-provider-source"> · {msg.source}</span>
+                        )}
+                        {typeof msg.latencyMs === 'number' && msg.latencyMs > 0 && (
+                          <span className="ai-provider-latency"> · {msg.latencyMs}ms</span>
+                        )}
+                      </span>
+                    )}
                     <span className="ai-bubble-time">
                       {new Date(msg.ts).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
                     </span>
+                    {/* Nút hiển thị chi tiết lỗi provider */}
+                    {msg.role === 'assistant' && msg.warnings && msg.warnings.filter(w => w.includes('failed') || w.includes('skipped') || w.includes('unavailable')).length > 0 && (
+                      <button
+                        className="ai-debug-toggle"
+                        onClick={() => setExpandedDebugId(expandedDebugId === msg.id ? null : msg.id)}
+                        title={expandedDebugId === msg.id ? 'Ẩn chi tiết lỗi' : 'Xem chi tiết lỗi provider'}
+                      >
+                        {expandedDebugId === msg.id ? '▲ Ẩn' : '△ Chi tiết'}
+                      </button>
+                    )}
                     {msg.role === 'assistant' && (
                       <button
                         className={`ai-copy-btn${copiedMsgId === msg.id ? ' ai-copy-btn--done' : ''}`}
@@ -580,6 +882,35 @@ export function AIChatWidget() {
                       </button>
                     )}
                   </div>
+                  {/* Panel chi tiết lỗi từng provider */}
+                  {msg.role === 'assistant' && expandedDebugId === msg.id && msg.warnings && (
+                    <div className="ai-provider-debug">
+                      {msg.providersTried && msg.providersTried.length > 0 && (
+                        <div className="ai-debug-row">
+                          <span className="ai-debug-label">Đã thử:</span>
+                          <span className="ai-debug-val">{msg.providersTried.join(' → ')}</span>
+                        </div>
+                      )}
+                      {msg.warnings.length > 0 && (
+                        <div className="ai-debug-errors">
+                          {msg.warnings.map((w, i) => {
+                            const isFailed = w.includes('failed') || w.includes('HTTP');
+                            const isSkipped = w.includes('skipped') || w.includes('missing');
+                            return (
+                              <div
+                                key={i}
+                                className={`ai-debug-warn ai-debug-warn--${
+                                  isFailed ? 'error' : isSkipped ? 'skip' : 'info'
+                                }`}
+                              >
+                                {isFailed ? '✗' : isSkipped ? '○' : 'i'} {w}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 {msg.role === 'user' && <UserAvatar />}
               </div>
@@ -601,7 +932,7 @@ export function AIChatWidget() {
           {showSuggestions && !isTyping && (
             <div className="ai-quickqs">
               <div className="ai-quickqs-header">
-                <span className="ai-quickqs-label">💡 Câu hỏi gợi ý</span>
+                <span className="ai-quickqs-label">Câu hỏi gợi ý</span>
                 <button
                   className="ai-quickqs-close"
                   onClick={() => setShowSuggestions(false)}
@@ -664,7 +995,7 @@ export function AIChatWidget() {
           {!conversationStarted && !showSuggestions && !isTyping && (
             <div className="ai-quickqs ai-quickqs--welcome">
               <div className="ai-quickqs-header">
-                <span className="ai-quickqs-label">✨ Bắt đầu với câu hỏi</span>
+                <span className="ai-quickqs-label">Gợi ý bắt đầu</span>
               </div>
               <div className="ai-quickqs-grid">
                 {WELCOME_CHIPS.map(({ label, q }) => (
@@ -715,20 +1046,31 @@ export function AIChatWidget() {
                   className={`ai-input-ghost${hintVisible ? ' ai-input-ghost--visible' : ''}`}
                   aria-hidden="true"
                 >
-                  {placeholderHint}
+                  Ví dụ: {placeholderHint}
                 </span>
               )}
             </div>
 
-            <button
-              id="ai-chat-send"
-              className={`ai-send-btn${input.trim() && !isTyping ? ' ai-send-btn--ready' : ''}`}
-              type="submit"
-              disabled={isTyping || !input.trim()}
-              aria-label="Gửi"
-            >
-              <IconSend />
-            </button>
+            {isTyping ? (
+              <button
+                type="button"
+                className="ai-send-btn ai-send-btn--stop"
+                onClick={handleStop}
+                aria-label="Dừng"
+              >
+                <IconStop />
+              </button>
+            ) : (
+              <button
+                id="ai-chat-send"
+                className={`ai-send-btn${input.trim() && !isTyping ? ' ai-send-btn--ready' : ''}`}
+                type="submit"
+                disabled={!input.trim()}
+                aria-label="Gửi"
+              >
+                <IconSend />
+              </button>
+            )}
           </form>
         </div>
       )}

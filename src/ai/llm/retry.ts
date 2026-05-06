@@ -1,7 +1,7 @@
 /**
- * Retry helper with exponential backoff + jitter
+ * Trình trợ giúp (helper) thử lại (retry) với thuật toán exponential backoff + jitter
  *
- * Usage:
+ * Cách sử dụng:
  *   const result = await withRetry(() => provider.generate(prompt), {
  *     maxRetries: 2,
  *     baseDelayMs: 300,
@@ -15,21 +15,21 @@ export interface RetryOptions {
   baseDelayMs: number;
   maxDelayMs: number;
   /**
-   * Predicate to decide whether a given error is worth retrying.
-   * Defaults to always retry.
+   * Hàm đánh giá để quyết định xem một lỗi có đáng để thử lại hay không.
+   * Mặc định là luôn thử lại.
    */
   shouldRetry?: (err: unknown, attempt: number) => boolean;
 }
 
-/** Default: don't retry auth errors */
+/** Mặc định: không thử lại đối với các lỗi xác thực (auth errors) */
 function defaultShouldRetry(err: unknown): boolean {
-  // Avoid circular dep — check duck-typed `kind` property
+  // Tránh phụ thuộc vòng (circular dep) — kiểm tra thuộc tính `kind` theo kiểu duck-typing
   const kind = (err as { kind?: string }).kind;
   return kind !== 'auth_error' && kind !== 'bad_request';
 }
 
 /**
- * Compute delay with full jitter:
+ * Tính toán độ trễ với full jitter:
  *   delay = random(0, min(maxDelay, base * 2^attempt))
  */
 function computeDelay(attempt: number, baseMs: number, maxMs: number): number {
@@ -63,6 +63,6 @@ export async function withRetry<T>(
     }
   }
 
-  // Should never reach here, but satisfies TypeScript
+  // Sẽ không bao giờ chạy đến đây, nhưng viết để thỏa mãn TypeScript
   throw lastError;
 }

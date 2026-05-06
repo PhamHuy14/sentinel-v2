@@ -111,6 +111,48 @@ ipcMain.handle('docs:open', async (_event, url) => {
   catch (error) { return { ok: false, error: error?.message }; }
 });
 
+// ── AI Fetch Proxy (avoid CORS in renderer) ───────────────────────────────
+const AI_ALLOWED_HOSTS = new Set([
+  'openrouter.ai',
+  'api.groq.com',
+  'api.together.xyz',
+  'api-inference.huggingface.co',
+  'generativelanguage.googleapis.com',
+]);
+
+ipcMain.handle('ai:fetch', async (_event, payload) => {
+  const url = payload?.url || '';
+  const method = payload?.method || 'POST';
+  const headers = payload?.headers || {};
+  const body = payload?.body || '';
+  const timeoutMs = payload?.timeoutMs || 15_000;
+
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:') throw new Error('Blocked non-HTTPS URL');
+    if (!AI_ALLOWED_HOSTS.has(parsed.host)) throw new Error('Blocked host');
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    const res = await fetch(url, {
+      method,
+      headers,
+      body,
+      signal: controller.signal,
+    });
+
+    clearTimeout(timer);
+    const text = await res.text();
+    const respHeaders = {};
+    res.headers.forEach((value, key) => { respHeaders[key] = value; });
+
+    return { ok: res.ok, status: res.status, body: text, headers: respHeaders };
+  } catch (error) {
+    return { ok: false, status: 0, body: '', error: error?.message || 'AI fetch failed' };
+  }
+});
+
 ipcMain.handle('report:export', async (_event, payload) => {
   try {
     const format     = payload?.format === 'json' ? 'json' : 'html';

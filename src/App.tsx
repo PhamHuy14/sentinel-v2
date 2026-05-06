@@ -7,6 +7,8 @@ import { ProjectScanForm } from './components/ProjectScanForm';
 import { ResultsPanel } from './components/ResultsPanel';
 import { ScanProgress } from './components/ScanProgress';
 import { UrlScanForm } from './components/UrlScanForm';
+import { initOrchestrator } from './ai/llm/hybridOrchestrator';
+import { buildLLMRouter } from './ai/llm/providerRegistry';
 import { useStore } from './store/useStore';
 
 function App() {
@@ -17,6 +19,17 @@ function App() {
     performUrlScan, performProjectScan, exportReport,
   } = useStore();
   const [showShortcutHelp, setShowShortcutHelp] = useState(false);
+
+  // Khởi tạo LLM router một lần duy nhất khi app mount
+  useEffect(() => {
+    try {
+      const router = buildLLMRouter();
+      initOrchestrator(router);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[SENTINEL] LLM router init failed:', err);
+    }
+  }, []);
 
   useEffect(() => {
     document.body.classList.remove('theme-dark', 'theme-light');
@@ -34,93 +47,45 @@ function App() {
     const onKeyDown = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey;
       if (!mod) return;
-
       const key = e.key.toLowerCase();
       const editable = isEditable(e.target);
-
-      if (key === '/') {
-        e.preventDefault();
-        setShowShortcutHelp((v) => !v);
-        return;
-      }
-
+      if (key === '/') { e.preventDefault(); setShowShortcutHelp((v) => !v); return; }
       if (editable) return;
-
-      if (key === '1') {
-        e.preventDefault();
-        setActiveTab('url');
-        return;
-      }
-
-      if (key === '5') {
-        e.preventDefault();
-        setActiveTab('checklist');
-        return;
-      }
-
-      if (key === '6') {
-        e.preventDefault();
-        setShowHistoryDropdown(!showHistoryDropdown);
-        return;
-      }
-
-      if (key === '7') {
-        e.preventDefault();
-        exportReport('html');
-        return;
-      }
-
-      if (key === '8') {
-        e.preventDefault();
-        toggleThemeMode();
-        return;
-      }
-
+      if (key === '1') { e.preventDefault(); setActiveTab('url'); return; }
+      if (key === '5') { e.preventDefault(); setActiveTab('checklist'); return; }
+      if (key === '6') { e.preventDefault(); setShowHistoryDropdown(!showHistoryDropdown); return; }
+      if (key === '7') { e.preventDefault(); exportReport('html'); return; }
+      if (key === '8') { e.preventDefault(); toggleThemeMode(); return; }
       if (key === 'enter') {
         e.preventDefault();
         if (activeTab === 'url') void performUrlScan();
         if (activeTab === 'project') void performProjectScan();
       }
     };
-
     const onEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setShowShortcutHelp(false);
-        setShowHistoryDropdown(false);
-      }
+      if (e.key === 'Escape') { setShowShortcutHelp(false); setShowHistoryDropdown(false); }
     };
-
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keydown', onEsc);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('keydown', onEsc);
-    };
-  }, [
-    activeTab,
-    exportReport,
-    performProjectScan,
-    performUrlScan,
-    setActiveTab,
-    setShowHistoryDropdown,
-    showHistoryDropdown,
-    toggleThemeMode,
-  ]);
+    return () => { window.removeEventListener('keydown', onKeyDown); window.removeEventListener('keydown', onEsc); };
+  }, [activeTab, exportReport, performProjectScan, performUrlScan, setActiveTab, setShowHistoryDropdown, showHistoryDropdown, toggleThemeMode]);
 
-  const switchTab = (tab: 'url' | 'project' | 'checklist') => {
-    setActiveTab(tab);
-  };
-
+  const switchTab = (tab: 'url' | 'project' | 'checklist') => setActiveTab(tab);
   const isChecklist = activeTab === 'checklist';
   const isUrlScan = activeTab === 'url';
 
-  const scanLayoutTitle = isUrlScan ? 'URL Scan' : 'Project Scan';
-  const scanLayoutHint = isUrlScan
-    ? 'Khu vực trái để cấu hình mục tiêu quét, khu vực phải để phân tích kết quả chi tiết.'
-    : 'Khu vực trái để chọn dự án, khu vực phải để theo dõi rủi ro và findings.';
+  const leftPanelTitle = isChecklist ? 'Cấu hình Review' : isUrlScan ? 'Cấu hình Quét' : 'Chọn Dự án';
+  const leftPanelSub = isChecklist
+    ? 'Chọn danh mục OWASP và ngữ cảnh để review bảo mật.'
+    : isUrlScan
+    ? 'Nhập URL và cấu hình mức độ quét.'
+    : 'Chọn thư mục mã nguồn để phân tích bảo mật.';
+
+  const rightPanelTitle = isChecklist ? 'Kết quả Review' : 'Kết quả Quét';
 
   return (
     <div className="app-shell">
+      {/* ── Header ── */}
       <header className="app-header">
         <div className="app-logo">
           <div className="logo-icon">S</div>
@@ -130,57 +95,98 @@ function App() {
           </div>
         </div>
 
-        <nav className="nav-tabs">
-          <button className={`nav-tab ${activeTab === 'url'       ? 'active' : ''}`} onClick={() => switchTab('url')}>URL Scan</button>
-          <button className={`nav-tab ${activeTab === 'project'   ? 'active' : ''}`} onClick={() => switchTab('project')}>Project Scan</button>
-          <button className={`nav-tab ${activeTab === 'checklist' ? 'active' : ''}`} onClick={() => switchTab('checklist')}>Checklist</button>
+        <div className="header-divider" />
+
+        <nav className="nav-tabs" role="tablist">
+          <button
+            role="tab"
+            aria-selected={activeTab === 'url'}
+            className={`nav-tab ${activeTab === 'url' ? 'active' : ''}`}
+            onClick={() => switchTab('url')}
+            title="Kiểm tra bảo mật một địa chỉ website (Ctrl+1)"
+          >
+            Quét Website
+          </button>
+          <button
+            role="tab"
+            aria-selected={activeTab === 'project'}
+            className={`nav-tab ${activeTab === 'project' ? 'active' : ''}`}
+            onClick={() => switchTab('project')}
+            title="Phân tích bảo mật mã nguồn dự án"
+          >
+            Quét Mã Nguồn
+          </button>
+          <button
+            role="tab"
+            aria-selected={activeTab === 'checklist'}
+            className={`nav-tab ${activeTab === 'checklist' ? 'active' : ''}`}
+            onClick={() => switchTab('checklist')}
+            title="Tự review theo danh sách kiểm tra OWASP (Ctrl+5)"
+          >
+            Review Thủ Công
+          </button>
         </nav>
 
         <div className="header-gap" />
 
-        <div className="hist-btn-wrap">
+        <div className="header-actions">
+          {/* Status */}
+          <div className="status-indicator" title={isLoading ? 'Đang chạy quét...' : 'Sẵn sàng quét'}>
+            <div className={`status-dot ${isLoading ? 'active' : ''}`} />
+            <span>{isLoading ? 'Đang quét' : 'Sẵn sàng'}</span>
+          </div>
+
+          <div className="header-actions-divider" />
+
+          {/* History */}
+          <div className="hist-btn-wrap">
+            <button
+              className={`btn-header ${showHistoryDropdown ? 'btn-header-active' : ''}`}
+              onClick={() => setShowHistoryDropdown(!showHistoryDropdown)}
+              title="Xem lịch sử các lần quét (Ctrl+6)"
+            >
+              Lịch sử
+              {history.length > 0 && <span className="hist-badge">{history.length}</span>}
+            </button>
+            {showHistoryDropdown && <HistoryPanel />}
+          </div>
+
+          {/* Theme */}
           <button
-            className={`btn-secondary hist-trigger ${showHistoryDropdown ? 'active' : ''}`}
-            onClick={() => setShowHistoryDropdown(!showHistoryDropdown)}
-            title="Scan History"
+            className="btn-header"
+            onClick={toggleThemeMode}
+            title={themeMode === 'dark' ? 'Chuyển giao diện sáng (Ctrl+8)' : 'Chuyển giao diện tối (Ctrl+8)'}
           >
-            🕐 History {history.length > 0 && <span className="hist-badge">{history.length}</span>}
+            {themeMode === 'dark' ? '☀️ Sáng' : '🌙 Tối'}
           </button>
-          {showHistoryDropdown && <HistoryPanel />}
-        </div>
 
-        <button
-          className="btn-secondary theme-toggle"
-          onClick={toggleThemeMode}
-          title={themeMode === 'dark' ? 'Chuyển sang light mode (Ctrl/Cmd+8)' : 'Chuyển sang dark mode (Ctrl/Cmd+8)'}
-        >
-          {themeMode === 'dark' ? '☀ Light' : '🌙 Dark'}
-        </button>
-
-        <button
-          className="btn-secondary shortcut-help-trigger"
-          onClick={() => setShowShortcutHelp(true)}
-          title="Xem phím tắt (Ctrl/Cmd+/)"
-        >
-          ⌨ Shortcuts
-        </button>
-
-        <div className="status-indicator">
-          <div className={`status-dot ${isLoading ? 'active' : ''}`} />
-          {isLoading ? 'Scanning' : 'Ready'}
+          {/* Shortcuts */}
+          <button
+            className="btn-header"
+            onClick={() => setShowShortcutHelp(true)}
+            title="Xem danh sách phím tắt (Ctrl+/)"
+            aria-label="Phím tắt"
+          >
+            ⌘ Phím tắt
+          </button>
         </div>
       </header>
 
+      {/* ── Workspace ── */}
       {isChecklist ? (
         <div className="workspace workspace-checklist-v2">
           <aside className="left-panel checklist-control-panel">
             <div className="layout-panel-head">
-              <div className="layout-panel-title">Checklist Input</div>
-              <div className="layout-panel-sub">Thu thập ngữ cảnh và danh mục OWASP làm nguồn cho vòng review.</div>
+              <div className="layout-panel-title">{leftPanelTitle}</div>
+              <div className="layout-panel-sub">{leftPanelSub}</div>
             </div>
             <ChecklistPanel />
           </aside>
           <main className="right-panel checklist-main-panel checklist-right-panel">
+            <div className="layout-panel-head">
+              <div className="layout-panel-title">{rightPanelTitle}</div>
+              <div className="layout-panel-sub">Kết quả phân tích và hướng dẫn khắc phục theo từng hạng mục.</div>
+            </div>
             {isLoading ? <ScanProgress /> : <ChecklistRightPanel />}
           </main>
         </div>
@@ -188,8 +194,8 @@ function App() {
         <div className="workspace workspace-scan-v2">
           <aside className="left-panel scan-config-panel">
             <div className="layout-panel-head">
-              <div className="layout-panel-title">{scanLayoutTitle}</div>
-              <div className="layout-panel-sub">{scanLayoutHint}</div>
+              <div className="layout-panel-title">{leftPanelTitle}</div>
+              <div className="layout-panel-sub">{leftPanelSub}</div>
             </div>
             {activeTab === 'url'     && <UrlScanForm />}
             {activeTab === 'project' && <ProjectScanForm />}
@@ -200,27 +206,28 @@ function App() {
         </div>
       )}
 
+      {/* ── Shortcut modal ── */}
       {showShortcutHelp && (
         <div className="shortcut-overlay" onClick={() => setShowShortcutHelp(false)}>
           <div className="shortcut-modal" onClick={(e) => e.stopPropagation()}>
             <div className="shortcut-modal-head">
-              <div className="shortcut-title">Phím tắt nhanh</div>
-              <button className="btn-secondary" onClick={() => setShowShortcutHelp(false)}>Đóng</button>
+              <div className="shortcut-title">⌘ Phím tắt nhanh</div>
+              <button className="btn-header" onClick={() => setShowShortcutHelp(false)}>✕ Đóng</button>
             </div>
             <div className="shortcut-list">
-              <div className="shortcut-row"><span>Chuyển URL Scan</span><kbd>Ctrl/Cmd + 1</kbd></div>
-              <div className="shortcut-row"><span>Mở Checklist</span><kbd>Ctrl/Cmd + 5</kbd></div>
-              <div className="shortcut-row"><span>Mở/đóng History</span><kbd>Ctrl/Cmd + 6</kbd></div>
-              <div className="shortcut-row"><span>Xuất báo cáo HTML</span><kbd>Ctrl/Cmd + 7</kbd></div>
-              <div className="shortcut-row"><span>Đổi Dark/Light mode</span><kbd>Ctrl/Cmd + 8</kbd></div>
-              <div className="shortcut-row"><span>Bắt đầu scan tab hiện tại</span><kbd>Ctrl/Cmd + Enter</kbd></div>
-              <div className="shortcut-row"><span>Hiện/ẩn bảng phím tắt</span><kbd>Ctrl/Cmd + /</kbd></div>
-              <div className="shortcut-row"><span>Đóng panel/modal</span><kbd>Esc</kbd></div>
+              <div className="shortcut-row"><span>Chuyển sang Quét Website</span><kbd>Ctrl + 1</kbd></div>
+              <div className="shortcut-row"><span>Chuyển sang Review Thủ Công</span><kbd>Ctrl + 5</kbd></div>
+              <div className="shortcut-row"><span>Mở / đóng Lịch sử</span><kbd>Ctrl + 6</kbd></div>
+              <div className="shortcut-row"><span>Xuất báo cáo HTML</span><kbd>Ctrl + 7</kbd></div>
+              <div className="shortcut-row"><span>Đổi giao diện Sáng / Tối</span><kbd>Ctrl + 8</kbd></div>
+              <div className="shortcut-row"><span>Bắt đầu quét (tab hiện tại)</span><kbd>Ctrl + Enter</kbd></div>
+              <div className="shortcut-row"><span>Hiện / ẩn bảng phím tắt</span><kbd>Ctrl + /</kbd></div>
+              <div className="shortcut-row"><span>Đóng panel / modal</span><kbd>Esc</kbd></div>
             </div>
           </div>
         </div>
       )}
-      {/* AI Chat Widget — floating overlay, visible on all tabs */}
+
       <AIChatWidget />
     </div>
   );

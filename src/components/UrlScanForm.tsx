@@ -2,17 +2,23 @@ import React, { useState } from 'react';
 import { useStore } from '../store/useStore';
 
 const DEPTH_OPTIONS = [
-  { value: 0, label: '0 — Chỉ URL gốc', desc: 'Chỉ quét URL chính' },
-  { value: 1, label: '1 cấp',           desc: 'Theo các liên kết sâu 1 cấp (khuyến nghị)' },
-  { value: 2, label: '2 cấp',           desc: 'Crawl sâu hơn, chậm hơn nhưng bao phủ nhiều bề mặt hơn' },
+  { value: 0, label: 'Chỉ trang gốc',   desc: 'Chỉ quét đúng URL bạn nhập vào — nhanh nhất' },
+  { value: 1, label: '1 cấp liên kết',  desc: 'Theo các liên kết từ trang gốc — khuyến nghị cho người mới' },
+  { value: 2, label: '2 cấp liên kết',  desc: 'Quét sâu hơn, phủ rộng hơn nhưng chậm hơn' },
 ];
 
 const BUDGET_OPTIONS = [
-  { value: 30,  label: '30 yêu cầu',  desc: 'Quét nhanh, các kiểm tra cốt lõi' },
-  { value: 60,  label: '60 yêu cầu',  desc: 'Cân bằng, khuyến nghị sử dụng' },
-  { value: 100, label: '100 yêu cầu', desc: 'Quét kỹ hơn, nhiều bài test injection hơn' },
-  { value: 200, label: '200 yêu cầu', desc: 'Quét chuyên sâu, bao phủ tốt nhất nhưng chậm nhất' },
+  { value: 30,  label: 'Nhẹ — 30 yêu cầu',        desc: 'Quét nhanh, phù hợp thử nghiệm ban đầu' },
+  { value: 60,  label: 'Cân bằng — 60 yêu cầu',   desc: 'Mức khuyến nghị — đủ kỹ, không quá lâu' },
+  { value: 100, label: 'Kỹ — 100 yêu cầu',        desc: 'Nhiều bài kiểm tra hơn, cần thêm thời gian' },
+  { value: 200, label: 'Chuyên sâu — 200 yêu cầu', desc: 'Toàn diện nhất — có thể mất 2–3 phút' },
 ];
+
+function getScanProfile(depth: number, budget: number) {
+  if (depth >= 2 || budget >= 100) return { label: 'Chuyên sâu', kind: 'deep',     est: '60–120 giây' };
+  if (depth === 1 && budget >= 60)  return { label: 'Cân bằng',   kind: 'balanced', est: '30–60 giây' };
+  return                                   { label: 'Nhanh',      kind: 'fast',     est: '10–30 giây' };
+}
 
 export const UrlScanForm: React.FC = () => {
   const {
@@ -22,100 +28,133 @@ export const UrlScanForm: React.FC = () => {
   } = useStore();
   const [showAuth, setShowAuth] = useState(false);
 
+  const profile = getScanProfile(crawlDepth, requestBudget);
+
   return (
     <>
+      {/* ── Hướng dẫn nhanh ── */}
+      <div className="onboarding-tip">
+        <strong>Bắt đầu nhanh:</strong> Nhập URL, giữ cài đặt mặc định và nhấn nút quét bên dưới.
+        Cài đặt mặc định phù hợp cho hầu hết trường hợp.
+      </div>
+
+      {/* ── Mục tiêu ── */}
       <div className="section">
-        <div className="section-label">Mục tiêu</div>
-        <div className="quick-help-box">
-          Chế độ mặc định phù hợp cho người mới: <strong>Độ sâu 1 cấp</strong> + <strong>60 request</strong>.
-        </div>
+        <div className="section-label">Địa chỉ website</div>
 
         <div className="field">
-          <label className="field-label">URL</label>
+          <label className="field-label" htmlFor="url-input">URL cần quét</label>
           <div className="input-clear-row">
             <input
+              id="url-input"
               type="text"
               placeholder="https://example.com"
               value={urlInput}
               onChange={(e) => setUrlInput(e.target.value)}
               disabled={isLoading}
               onKeyDown={(e) => e.key === 'Enter' && !isLoading && performUrlScan()}
+              autoComplete="off"
             />
             {urlInput && (
               <button
                 type="button"
                 className="btn-clear"
-                title="Xóa URL"
+                title="Xoá URL"
                 disabled={isLoading}
                 onClick={() => setUrlInput('')}
-              >
-                ✕
-              </button>
+              >✕</button>
             )}
           </div>
         </div>
+      </div>
+
+      {/* ── Cấu hình quét ── */}
+      <div className="section">
+        <div className="section-label">Mức độ quét</div>
 
         <div className="field-row">
           <div className="field">
-            <label className="field-label field-label-inline">
-              Độ sâu crawl
+            <label className="field-label field-label-inline" htmlFor="crawl-depth">
+              Phạm vi
               <span className="field-help" title={DEPTH_OPTIONS.find(o => o.value === crawlDepth)?.desc}>?</span>
             </label>
-            <select value={crawlDepth} onChange={(e) => setCrawlDepth(Number(e.target.value))} disabled={isLoading}>
+            <select
+              id="crawl-depth"
+              value={crawlDepth}
+              onChange={(e) => setCrawlDepth(Number(e.target.value))}
+              disabled={isLoading}
+            >
               {DEPTH_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
+
           <div className="field">
-            <label className="field-label field-label-inline">
-              Số lượng request
+            <label className="field-label field-label-inline" htmlFor="request-budget">
+              Cường độ
               <span className="field-help" title={BUDGET_OPTIONS.find(o => o.value === requestBudget)?.desc}>?</span>
             </label>
-            <select value={requestBudget} onChange={(e) => setRequestBudget(Number(e.target.value))} disabled={isLoading}>
+            <select
+              id="request-budget"
+              value={requestBudget}
+              onChange={(e) => setRequestBudget(Number(e.target.value))}
+              disabled={isLoading}
+            >
               {BUDGET_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
         </div>
 
-        {/* Gợi ý cấu hình scan */}
-        <div className="scan-profile-hint">
-          {crawlDepth >= 2 || requestBudget >= 100
-            ? '🔴 Quét chuyên sâu — có thể mất 60-120 giây'
-            : crawlDepth === 1 && requestBudget >= 60
-            ? '🟡 Quét cân bằng — khoảng 30-60 giây'
-            : '🟢 Quét nhanh — khoảng 10-30 giây'}
+        {/* Badge tốc độ */}
+        <div className="scan-profile-row">
+          <span className={`scan-speed-badge scan-speed-${profile.kind}`}>{profile.label}</span>
+          <span className="scan-profile-est">Ước tính {profile.est}</span>
         </div>
       </div>
 
+      {/* ── Xác thực (tuỳ chọn) ── */}
       <div className="section">
         <button
           type="button"
           className={`collapsible-btn ${showAuth ? 'open' : ''}`}
           onClick={() => setShowAuth(!showAuth)}
+          aria-expanded={showAuth}
         >
-          <span>Xác thực</span>
+          <span>Xác thực <span className="optional-tag">không bắt buộc</span></span>
           <span className={`collapsible-icon ${showAuth ? 'open' : ''}`}>▶</span>
         </button>
 
         {showAuth && (
           <div className="collapsible-body">
+            <p className="auth-hint">Chỉ cần điền nếu website yêu cầu đăng nhập để truy cập nội dung.</p>
+
             <div className="field">
-              <label className="field-label">Cookie</label>
-              <input type="text" placeholder="session=abc123; token=xyz"
-                value={authConfig.cookie} onChange={(e) => setAuthConfig({ cookie: e.target.value })} disabled={isLoading} />
+              <label className="field-label" htmlFor="auth-cookie">Cookie phiên đăng nhập</label>
+              <input id="auth-cookie" type="text" placeholder="session=abc123; token=xyz"
+                value={authConfig.cookie}
+                onChange={(e) => setAuthConfig({ cookie: e.target.value })}
+                disabled={isLoading} />
             </div>
+
             <div className="field">
-              <label className="field-label">Token Bearer</label>
-              <input type="text" placeholder="eyJhbGci..."
-                value={authConfig.bearerToken} onChange={(e) => setAuthConfig({ bearerToken: e.target.value })} disabled={isLoading} />
+              <label className="field-label" htmlFor="auth-bearer">Token Bearer</label>
+              <input id="auth-bearer" type="text" placeholder="eyJhbGci..."
+                value={authConfig.bearerToken}
+                onChange={(e) => setAuthConfig({ bearerToken: e.target.value })}
+                disabled={isLoading} />
             </div>
+
             <div className="field">
-              <label className="field-label">Header Authorization</label>
-              <input type="text" placeholder="Basic dXNlcjpwYXNz"
-                value={authConfig.authorization} onChange={(e) => setAuthConfig({ authorization: e.target.value })} disabled={isLoading} />
+              <label className="field-label" htmlFor="auth-authz">Header Authorization</label>
+              <input id="auth-authz" type="text" placeholder="Basic dXNlcjpwYXNz"
+                value={authConfig.authorization}
+                onChange={(e) => setAuthConfig({ authorization: e.target.value })}
+                disabled={isLoading} />
             </div>
+
             <div className="field">
-              <label className="field-label">Header tùy chỉnh (JSON)</label>
+              <label className="field-label" htmlFor="auth-custom">Header tuỳ chỉnh (JSON)</label>
               <textarea
+                id="auth-custom"
                 placeholder='{"X-API-Key": "abc123"}'
                 value={typeof authConfig.customHeaders === 'string'
                   ? authConfig.customHeaders
@@ -128,9 +167,24 @@ export const UrlScanForm: React.FC = () => {
         )}
       </div>
 
-      <button className="btn-primary" onClick={performUrlScan} disabled={isLoading}>
-        {isLoading ? 'Đang quét…' : 'Bắt đầu quét'}
-      </button>
+      {/* ── Sticky CTA ── */}
+      <div className="left-panel-cta">
+        <button
+          className="btn-primary"
+          onClick={performUrlScan}
+          disabled={isLoading || !urlInput.trim()}
+          title={!urlInput.trim() ? 'Vui lòng nhập URL trước khi quét' : 'Bắt đầu quét bảo mật (Ctrl+Enter)'}
+        >
+          {isLoading ? (
+            <><span className="spinner-sm" style={{ borderColor: 'rgba(42,54,59,.2)', borderTopColor: 'var(--text)' }} /> Đang quét…</>
+          ) : (
+            <>▶ Bắt đầu quét website</>
+          )}
+        </button>
+        {!urlInput.trim() && !isLoading && (
+          <p className="form-hint-below">Nhập URL phía trên để kích hoạt nút quét</p>
+        )}
+      </div>
     </>
   );
 };

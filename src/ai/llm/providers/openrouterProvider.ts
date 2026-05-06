@@ -1,14 +1,15 @@
 /**
- * Groq Provider Adapter (Adapter cho nhà cung cấp Groq)
+ * OpenRouter Provider Adapter (Adapter cho nhà cung cấp OpenRouter)
  *
- * Gói miễn phí: https://console.groq.com
- * Mô hình: llama-3.3-70b-versatile (nhanh, mạnh, miễn phí)
- * Biến môi trường: VITE_GROQ_API_KEY
+ * Gói miễn phí: https://openrouter.ai
+ * Mô hình: meta-llama/llama-3.3-70b-instruct:free (chất lượng cao, miễn phí)
+ * Biến môi trường: VITE_OPENROUTER_API_KEY
  *
  * FIX v2.1:
- *  - Đổi DEFAULT_MODEL từ llama3-8b-8192 (deprecated) → llama-3.3-70b-versatile
- *  - Hỗ trợ đọc danh sách model từ VITE_GROQ_MODELS (comma-separated)
- *  - Tự động fallback sang model tiếp theo nếu model hiện tại bị lỗi 400/404
+ *  - Đổi model mặc định: llama-3.1-8b-instruct:free → llama-3.3-70b-instruct:free
+ *  - Sửa tên env var: VITE_OPENROUTER_MODEL → VITE_OPENROUTER_MODELS (khớp với .env)
+ *  - Hỗ trợ danh sách model fallback (comma-separated)
+ *  - Thử model tiếp theo khi nhận 404 (model không tồn tại)
  */
 
 import { ProviderMetricsTracker } from '../metricsTracker.js';
@@ -19,17 +20,17 @@ import {
     ProviderHealth,
 } from '../types';
 
-const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
-// FIX: Danh sách model fallback — llama3-8b-8192 đã bị Groq deprecated
+// FIX: Danh sách model free tier hiện có trên OpenRouter (2025)
 const FALLBACK_MODELS = [
-  'llama-3.3-70b-versatile',   // Tốt nhất, miễn phí, ĐỀ XUẤT
-  'llama-3.1-70b-versatile',   // Fallback #1
-  'llama3-70b-8192',           // Fallback #2 (tên cũ hơn nhưng vẫn hoạt động)
-  'llama-3.1-8b-instant',      // Fallback #3 (nhỏ hơn nhưng siêu nhanh)
+  'meta-llama/llama-3.3-70b-instruct:free',   // Tốt nhất hiện có, miễn phí
+  'meta-llama/llama-3.1-8b-instruct:free',     // Fallback nhỏ hơn
+  'mistralai/mistral-7b-instruct:free',         // Fallback Mistral
+  'google/gemma-3-27b-it:free',                 // Fallback Gemma
 ];
 
-const DEFAULT_TIMEOUT = 15_000;
+const DEFAULT_TIMEOUT = 20_000;
 
 type AiFetch = (payload: {
   url: string;
@@ -157,19 +158,20 @@ async function streamOpenAiCompletion(
   }
 }
 
-/** Đọc danh sách model từ env var VITE_GROQ_MODELS (comma-separated) hoặc dùng fallback mặc định */
+/** Đọc danh sách model từ VITE_OPENROUTER_MODELS hoặc dùng fallback mặc định */
 function resolveModelList(): string[] {
   const env = (import.meta as unknown as Record<string, Record<string, string>>).env ?? {};
-  const fromEnv = env.VITE_GROQ_MODELS ?? '';
+  // FIX: Hỗ trợ cả VITE_OPENROUTER_MODELS (mới) và VITE_OPENROUTER_MODEL (cũ)
+  const fromEnv = env.VITE_OPENROUTER_MODELS ?? env.VITE_OPENROUTER_MODEL ?? '';
   if (fromEnv.trim()) {
     return fromEnv.split(',').map(m => m.trim()).filter(Boolean);
   }
   return FALLBACK_MODELS;
 }
 
-export class GroqProvider implements LLMProvider {
-  readonly id = 'groq';
-  readonly label = 'Groq (Llama-3.3 70B)';
+export class OpenRouterProvider implements LLMProvider {
+  readonly id = 'openrouter';
+  readonly label = 'OpenRouter (Llama-3.3 70B Free)';
   readonly supportsJsonMode = true;
 
   private readonly apiKey: string;
@@ -178,18 +180,24 @@ export class GroqProvider implements LLMProvider {
 
   constructor(metrics: ProviderMetricsTracker) {
     const env = (import.meta as unknown as Record<string, Record<string, string>>).env ?? {};
-    this.apiKey = env.VITE_GROQ_API_KEY ?? '';
+    this.apiKey = env.VITE_OPENROUTER_API_KEY ?? '';
     this.metrics = metrics;
     this.modelList = resolveModelList();
   }
 
   async generate(prompt: string, options: GenerateOptions = {}): Promise<string> {
-    if (!this.apiKey) throw new ProviderError('auth_error', this.id, 'VITE_GROQ_API_KEY not set');
+    if (!this.apiKey) throw new ProviderError('auth_error', this.id, 'VITE_OPENROUTER_API_KEY not set');
 
     const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT;
     const start = Date.now();
 
-    // FIX: Thử từng model trong danh sách, dừng khi thành công
+    const headers = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${this.apiKey}`,
+      'HTTP-Referer': 'https://sentinel.local',
+      'X-Title': 'SENTINEL OWASP Assistant',
+    };
+
     let lastError: ProviderError | null = null;
 
     for (const model of this.modelList) {
@@ -197,7 +205,7 @@ export class GroqProvider implements LLMProvider {
         model,
         messages: [
           { role: 'system', content: options.systemPrompt ?? 'You are a helpful security assistant.' },
-          { role: 'user',   content: prompt },
+          { role: 'user', content: prompt },
         ],
         max_tokens: options.maxTokens ?? 1024,
         temperature: 0.7,
@@ -205,14 +213,10 @@ export class GroqProvider implements LLMProvider {
       };
 
       try {
-        const headers = {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.apiKey}`,
-        };
         const canStream = Boolean(options.onToken) && options.stream !== false && !getAiFetch();
         const res = canStream
-          ? await streamOpenAiCompletion(GROQ_API_URL, headers, body, timeoutMs, options.onToken!, options.signal)
-          : await fetchJson(GROQ_API_URL, { headers, body: JSON.stringify(body) }, timeoutMs, options.signal);
+          ? await streamOpenAiCompletion(OPENROUTER_API_URL, headers, body, timeoutMs, options.onToken!, options.signal)
+          : await fetchJson(OPENROUTER_API_URL, { headers, body: JSON.stringify(body) }, timeoutMs, options.signal);
         const latency = Date.now() - start;
 
         if (res.status === 429) {
@@ -220,10 +224,10 @@ export class GroqProvider implements LLMProvider {
           throw new ProviderError('rate_limit', this.id, 'Rate limit exceeded', 429);
         }
 
-        // FIX: 400 hoặc 404 thường do model deprecated/không tồn tại → thử model tiếp theo
-        if (res.status === 400 || res.status === 404) {
-          lastError = new ProviderError('bad_request', this.id, `Model "${model}" unavailable (HTTP ${res.status})`, res.status);
-          continue; // thử model tiếp theo
+        // FIX: 404 nghĩa là model không tồn tại → thử model tiếp theo
+        if (res.status === 404 || res.status === 400) {
+          lastError = new ProviderError('bad_request', this.id, `Model "${model}" not available (HTTP ${res.status})`, res.status);
+          continue;
         }
 
         if (!res.ok) {
@@ -262,9 +266,7 @@ export class GroqProvider implements LLMProvider {
           throw new ProviderError('timeout', this.id, 'Request timed out');
         }
         if (err instanceof ProviderError) {
-          // Nếu là lỗi rate_limit hoặc auth → không thử tiếp
           if (err.kind === 'rate_limit' || err.kind === 'auth_error') throw err;
-          // bad_request do model deprecated → thử tiếp
           lastError = err;
           continue;
         }
@@ -273,9 +275,8 @@ export class GroqProvider implements LLMProvider {
       }
     }
 
-    // Tất cả model đều thất bại
     this.metrics.recordFailure(this.id, Date.now() - start);
-    throw lastError ?? new ProviderError('bad_request', this.id, 'All Groq models unavailable');
+    throw lastError ?? new ProviderError('bad_request', this.id, 'All OpenRouter models unavailable');
   }
 
   async health(): Promise<ProviderHealth> {
@@ -283,7 +284,6 @@ export class GroqProvider implements LLMProvider {
   }
 
   async estimateCostOrQuota(): Promise<number> {
-    // Groq free tier: ~14.400 request/ngày cho llama-3.3-70b-versatile
-    return this.apiKey ? 14_400 : 0;
+    return this.apiKey ? 8_000 : 0;
   }
 }
