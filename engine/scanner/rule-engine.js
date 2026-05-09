@@ -4,41 +4,26 @@
 const { runAllA01Rules } = require('../rules/a01');
 
 // ── A02 ──────────────────────────────────────────────────────────────────────
-const { runMissingSecurityHeaders } = require('../rules/a02/missing-security-headers');
-const { runCookieFlags } = require('../rules/a02/cookie-flags');
-const { runCorsMisconfig } = require('../rules/a02/cors-misconfig');
-const { runDangerousMethods } = require('../rules/a02/dangerous-methods');
-const { runDebugExposure } = require('../rules/a02/debug-exposure');
-const { runServerHeaderExposure } = require('../rules/a02/server-header-exposure');
-const { runTransportSecurity } = require('../rules/a02/transport-security');
-const { runSensitiveFileExposure } = require('../rules/a02/sensitive-file-exposure');
+const { runAllA02Rules } = require('../rules/a02');
 
 // ── A03 ──────────────────────────────────────────────────────────────────────
-const { runNpmDependencyRisk } = require('../rules/a03/npm-dependency-risk');
-const { runNugetDependencyRisk } = require('../rules/a03/nuget-dependency-risk');
-const { runDotnetFrameworkVersionRisk } = require('../rules/a03/dotnet-framework-version-risk');
-const { runNodeEngineVersionRisk } = require('../rules/a03/node-engine-version-risk');
-const { runSensitiveFileExposureRisk } = require('../rules/a03/sensitive-file-exposure-risk');
-const { runPackageLockConsistency, runTyposquattingRisk, runCiCdSecurityGates, runSensitiveDataInLogs, runStructuredLogging } = require('../rules/source-enhanced/supply-chain-enhanced');
+const { runAllA03Rules } = require('../rules/a03');
+const { runSensitiveDataInLogs, runStructuredLogging } = require('../rules/source-enhanced/supply-chain-enhanced');
 
 // ── A04 ──────────────────────────────────────────────────────────────────────
 const { runA04Rules } = require('../rules/a04');
 
 // ── A05 ──────────────────────────────────────────────────────────────────────
-const { runReflectedXss } = require('../rules/a05/reflected-xss');
-const { runSqliErrorBased } = require('../rules/a05/sqli-error-based');
-const { runCommandInjectionHeuristic } = require('../rules/a05/command-injection-heuristic');
-const { runSstiHeuristic, runSqliEnhanced, runNoSqliHeuristic, runXxeHeuristic, runPrototypePollutionHeuristic } = require('../rules/a05/injection-enhanced');
+const { runAllA05Rules } = require('../rules/a05');
+
+// ── A06 ──────────────────────────────────────────────────────────────────────
+const { runAllA06Rules } = require('../rules/a06');
 
 // ── A07 ──────────────────────────────────────────────────────────────────────
-const { runAccountEnumeration } = require('../rules/a07/account-enumeration');
-const { runSessionFixation } = require('../rules/a07/session-fixation');
-const { runResetFlow } = require('../rules/a07/reset-flow');
-const { runBruteForceProtection, runPasswordPolicyHeuristic, runDefaultCredentialsHint, runSessionManagement, runMfaPresence } = require('../rules/a07/auth-enhanced');
+const { runAllA07Rules } = require('../rules/a07');
 
 // ── A08 ──────────────────────────────────────────────────────────────────────
-const { runMissingIntegrityCheck } = require('../rules/a08/missing-integrity-check');
-const { runUntrustedConfigData } = require('../rules/a08/untrusted-config-data');
+const { runAllA08Rules } = require('../rules/a08');
 
 // ── A09 ──────────────────────────────────────────────────────────────────────
 const { runAuthEventLogging } = require('../rules/a09/auth-event-logging');
@@ -64,31 +49,13 @@ function deduplicateFindings(findings) {
 function runUrlRules(context) {
   const findings = [
     ...runAllA01Rules(context),
-    ...runMissingSecurityHeaders(context),
-    ...runCookieFlags(context),
-    ...runCorsMisconfig(context),
-    ...runDangerousMethods(context),
-    ...runDebugExposure(context),
-    ...runServerHeaderExposure(context),
-    ...runTransportSecurity(context),
-    ...runSensitiveFileExposure(context),
+    ...runAllA02Rules(context),
+    ...runAllA03Rules(context),
     ...runA04Rules(context),
-    ...runReflectedXss(context),
-    ...runSqliErrorBased(context),
-    ...runSqliEnhanced(context),
-    ...runCommandInjectionHeuristic(context),
-    ...runSstiHeuristic(context),
-    ...runNoSqliHeuristic(context),
-    ...runXxeHeuristic(context),
-    ...runPrototypePollutionHeuristic(context),
-    ...runAccountEnumeration(context),
-    ...runSessionFixation(context),
-    ...runResetFlow(context),
-    ...runBruteForceProtection(context),
-    ...runPasswordPolicyHeuristic(context),
-    ...runDefaultCredentialsHint(context),
-    ...runSessionManagement(context),
-    ...runMfaPresence(context),
+    ...runAllA05Rules(context),
+    ...runAllA06Rules(context),
+    ...runAllA07Rules(context),
+    ...runAllA08Rules(context),
     ...runMalformedInput(context),
     ...runExceptionLeakage(context),
   ];
@@ -97,16 +64,11 @@ function runUrlRules(context) {
 
 function runProjectRules(context) {
   const findings = [
-    ...runNpmDependencyRisk(context),
-    ...runNugetDependencyRisk(context),
-    ...runDotnetFrameworkVersionRisk(context),
-    ...runNodeEngineVersionRisk(context),
-    ...runSensitiveFileExposureRisk(context),
-    ...runPackageLockConsistency(context),
-    ...runTyposquattingRisk(context),
-    ...runMissingIntegrityCheck(context),
-    ...runUntrustedConfigData(context),
-    ...runCiCdSecurityGates(context),
+    ...runAllA03Rules(context),
+    ...runA04Rules(context),
+    ...runAllA05Rules(context),
+    ...runAllA06Rules(context),
+    ...runAllA08Rules(context),
     ...runAuthEventLogging(context),
     ...runAlertingCheck(context),
     ...runSensitiveDataInLogs(context),

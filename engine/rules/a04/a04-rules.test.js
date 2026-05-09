@@ -290,7 +290,11 @@ describe('A04 runA04Rules – integration smoke test', () => {
   });
 
   it('all returned findings have owaspCategory "A04"', () => {
-    const ctx = httpCtx(); // HTTP triggers transport finding
+    const ctx = {
+      folderPath: '/project',
+      files: ['/project/src/auth.js'],
+      codeFiles: [{ path: '/project/src/auth.js', content: 'app.post("/login", loginHandler);' }],
+    };
     const findings = runA04Rules(ctx);
     for (const f of findings) {
       expect(f.owaspCategory).toBe('A04');
@@ -298,21 +302,20 @@ describe('A04 runA04Rules – integration smoke test', () => {
   });
 
   it('returns empty array for a fully-compliant clean context', () => {
-    const ctx = httpsCtx({
-      responseHeaders: { 'strict-transport-security': 'max-age=63072000; includeSubDomains; preload' },
-      text: '<html><body>Hello</body></html>',
-      setCookies: [],
-    });
+    const ctx = { files: [], codeFiles: [], configFiles: [], textFiles: [] };
     const findings = runA04Rules(ctx);
     expect(findings.length).toBe(0);
   });
 
   it('returns multiple findings for a context with multiple issues', () => {
-    const ctx = httpsCtx({
-      responseHeaders: {}, // no HSTS
-      text: '<html><img src="http://cdn.example.com/x.png"><script>new WebSocket("ws://api.example.com");</script></html>',
-      setCookies: ['session=abc; Path=/'], // missing Secure, HttpOnly, SameSite
-    });
+    const ctx = {
+      folderPath: '/project',
+      files: ['/project/src/routes.js'],
+      codeFiles: [{
+        path: '/project/src/routes.js',
+        content: 'router.post("/login", login); router.delete("/admin/users/:id", destroyUser);',
+      }],
+    };
     const findings = runA04Rules(ctx);
     expect(findings.length).toBeGreaterThan(2);
   });

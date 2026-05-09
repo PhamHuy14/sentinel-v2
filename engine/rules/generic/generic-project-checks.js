@@ -8,7 +8,7 @@ function runGenericProjectChecks(context) {
   if (!/validate|sanitize|escape|encode|parameterized|prepared statement/i.test(codeContent)) {
     findings.push(normalizeFinding({
       ruleId: 'GEN-INPUT-001',
-      owaspCategory: 'A05',
+      owaspCategory: 'A03',
       title: 'Chưa thấy dấu hiệu validation/escaping input rõ ràng (heuristic)',
       severity: 'medium',
       confidence: 'low',
@@ -16,7 +16,7 @@ function runGenericProjectChecks(context) {
       location: 'codebase',
       evidence: ['Phát hiện không thấy pattern validation hoặc escaping phổ biến trong code samples.'],
       remediation: 'Bổ sung validation input ở frontend/backend; escape output theo context.',
-      references: ['https://owasp.org/Top10/2025/A05_2025-Injection/'],
+      references: ['https://owasp.org/Top10/2025/A03_2025-Injection/'],
       collector: 'source'
     }));
   }
@@ -41,7 +41,7 @@ function runGenericProjectChecks(context) {
   if ((context.files || []).length > 50) {
     findings.push(normalizeFinding({
       ruleId: 'GEN-SCALE-001',
-      owaspCategory: 'A06',
+      owaspCategory: 'A04',
       title: 'Project kích thước lớn - cần security review toàn diện',
       severity: 'low',
       confidence: 'high',
@@ -49,7 +49,7 @@ function runGenericProjectChecks(context) {
       location: 'project metrics',
       evidence: [`Project có ${context.files.length} files - kích thước lớn, cần design review.`],
       remediation: 'Thực hiện threat modeling, architecture review, và security testing chi tiết.',
-      references: ['https://owasp.org/Top10/2025/A06_2025-Insecure_Design/'],
+      references: ['https://owasp.org/Top10/2025/A04_2025-Insecure_Design/'],
       collector: 'source'
     }));
   }

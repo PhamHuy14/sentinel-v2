@@ -591,13 +591,13 @@ async function runProjectScan(folderPath, options = {}) {
 function getChecklist() {
   const categories = [
     { id: 'A01', name: 'Broken Access Control' },
-    { id: 'A02', name: 'Security Misconfiguration' },
-    { id: 'A03', name: 'Software Supply Chain Failures' },
-    { id: 'A04', name: 'Cryptographic Failures' },
-    { id: 'A05', name: 'Injection' },
-    { id: 'A06', name: 'Insecure Design' },
-    { id: 'A07', name: 'Authentication Failures' },
-    { id: 'A08', name: 'Software or Data Integrity Failures' },
+    { id: 'A02', name: 'Cryptographic Failures' },
+    { id: 'A03', name: 'Injection' },
+    { id: 'A04', name: 'Insecure Design' },
+    { id: 'A05', name: 'Security Misconfiguration' },
+    { id: 'A06', name: 'Vulnerable & Outdated Components' },
+    { id: 'A07', name: 'Identification & Authentication Failures' },
+    { id: 'A08', name: 'Software & Data Integrity Failures' },
     { id: 'A09', name: 'Security Logging & Alerting Failures' },
     { id: 'A10', name: 'Mishandling of Exceptional Conditions' },
   ];

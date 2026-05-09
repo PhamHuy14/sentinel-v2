@@ -174,13 +174,13 @@ async function _analyzeResponse(res, payload, paramType, targetUrl, key, locatio
     if (isReflectedXss(res, payload)) {
       const confidence = await verifyXss(targetUrl, key, client, reqHeaders).catch(() => 'medium');
       _push(findings, emit, normalizeFinding({
-        ruleId: 'A05-XSS-FUZZ', owaspCategory: 'A05',
+        ruleId: 'A03-XSS-FUZZ', owaspCategory: 'A03',
         title: `Reflected XSS tại tham số '${key}'`,
         severity: 'high', confidence,
         target: targetUrl, location,
         evidence: [`Payload: ${payload}`, `Tham số '${key}' phản xạ dữ liệu chưa encode vào HTML response.`],
         remediation: 'Dùng cơ chế output encoding theo đúng ngữ cảnh. Đồng thời kiểm tra và siết chặt header Content-Security-Policy.',
-        references: ['https://owasp.org/Top10/2025/A05_2025-Injection/'],
+        references: ['https://owasp.org/Top10/2025/A03_2025-Injection/'],
         collector: 'active-fuzzer',
       }));
       return true;
@@ -192,13 +192,13 @@ async function _analyzeResponse(res, payload, paramType, targetUrl, key, locatio
     if (isSqlError(res)) {
       const confidence = await verifySqli(targetUrl, key, client, reqHeaders).catch(() => 'medium');
       _push(findings, emit, normalizeFinding({
-        ruleId: 'A05-SQLI-ERROR', owaspCategory: 'A05',
+        ruleId: 'A03-SQLI-ERROR', owaspCategory: 'A03',
         title: `SQL Injection (Error-based) tại tham số '${key}'`,
         severity: 'critical', confidence,
         target: targetUrl, location,
         evidence: [`Payload: ${payload}`, `Server trả về SQL error hoặc HTTP 500 khi inject vào '${key}'.`],
         remediation: 'Dùng Prepared Statements / Parameterized Queries. Không bao giờ để lộ lỗi DB thô ra ngoài.',
-        references: ['https://owasp.org/Top10/2025/A05_2025-Injection/'],
+        references: ['https://owasp.org/Top10/2025/A03_2025-Injection/'],
         collector: 'active-fuzzer',
       }));
       return true;
@@ -208,13 +208,13 @@ async function _analyzeResponse(res, payload, paramType, targetUrl, key, locatio
   // SQLi — dạng time-based (chỉ áp dụng cho payload SLEEP/WAITFOR)
   if ((payload.includes('SLEEP') || payload.includes('WAITFOR') || payload.includes('pg_sleep')) && isSqlTiming(res, SLEEP_SECS, baselineMs)) {
     _push(findings, emit, normalizeFinding({
-      ruleId: 'A05-SQLI-TIME', owaspCategory: 'A05',
+      ruleId: 'A03-SQLI-TIME', owaspCategory: 'A03',
       title: `SQL Injection (Time-based Blind) tại tham số '${key}'`,
       severity: 'critical', confidence: 'medium',
       target: targetUrl, location,
       evidence: [`Payload: ${payload}`, `Server phản hồi sau ${res.timeMs}ms (baseline: ${baselineMs}ms) — có khả năng time-based SQLi.`],
         remediation: 'Dùng truy vấn tham số hóa. Có thể bật WAF và giới hạn tần suất request để giảm nguy cơ khai thác.',
-      references: ['https://owasp.org/Top10/2025/A05_2025-Injection/'],
+      references: ['https://owasp.org/Top10/2025/A03_2025-Injection/'],
       collector: 'active-fuzzer',
     }));
     return true;
@@ -275,13 +275,13 @@ async function _analyzeResponse(res, payload, paramType, targetUrl, key, locatio
   if (paramType === 'template' || paramType === 'text') {
     if (isSsti(res, payload)) {
       _push(findings, emit, normalizeFinding({
-        ruleId: 'A05-SSTI-FUZZ', owaspCategory: 'A05',
+        ruleId: 'A03-SSTI-FUZZ', owaspCategory: 'A03',
         title: `Server-Side Template Injection (SSTI) tại tham số '${key}'`,
         severity: 'critical', confidence: 'high',
         target: targetUrl, location,
         evidence: [`Payload: ${payload}`, `Server đã evaluate biểu thức template — RCE có thể khai thác đƣợc.`],
         remediation: 'Không render user input qua template engine. Dùng sandbox hoặc static templates.',
-        references: ['https://owasp.org/Top10/2025/A05_2025-Injection/'],
+        references: ['https://owasp.org/Top10/2025/A03_2025-Injection/'],
         collector: 'active-fuzzer',
       }));
       return true;
@@ -292,13 +292,13 @@ async function _analyzeResponse(res, payload, paramType, targetUrl, key, locatio
   if (paramType === 'cmd') {
     if (isCommandInjection(res)) {
       _push(findings, emit, normalizeFinding({
-        ruleId: 'A05-CMDI-FUZZ', owaspCategory: 'A05',
+        ruleId: 'A03-CMDI-FUZZ', owaspCategory: 'A03',
         title: `Lỗ hổng Command Injection tại tham số '${key}'`,
         severity: 'critical', confidence: 'high',
         target: targetUrl, location,
         evidence: [`Payload: ${payload}`, `Response chứa output của lệnh hệ thống (id/ls/whoami).`],
         remediation: 'Không truyền user input vào shell. Dùng allowlist ký tự, escape hoặc thư viện subprocess an toàn.',
-        references: ['https://owasp.org/Top10/2025/A05_2025-Injection/'],
+        references: ['https://owasp.org/Top10/2025/A03_2025-Injection/'],
         collector: 'active-fuzzer',
       }));
       return true;

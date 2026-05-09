@@ -40,9 +40,8 @@ const ALL_A01_RULES = [
   { fn: runSessionManagementHeuristic,   name: 'SessionManagement',     owasp: 'OTG-SESS-001'  },
   { fn: runCsrfHeuristic,                name: 'CSRF',                  owasp: 'OTG-SESS-005'  },
 
-  // Nhóm cấu hình HTTP.
+  // Nhóm HTTP method liên quan kiểm soát truy cập.
   { fn: runHttpVerbTampering,            name: 'HttpVerbTampering',     owasp: 'OTG-CONFIG-006' },
-  { fn: runSecurityHeadersHeuristic,     name: 'SecurityHeaders',       owasp: 'OTG-AUTHN-006' },
 ];
 
 /**

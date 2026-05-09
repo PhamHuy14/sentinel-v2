@@ -40,8 +40,10 @@ const {
 } = require('./sensitive-data');
 
 const {
-  runA04Rules,
-} = require('./index');
+  remapFindings,
+} = require('../remap-finding');
+
+const A02_REF = 'https://owasp.org/Top10/2025/A02_2025-Cryptographic_Failures/';
 
 /**
  * Legacy entry-point alias.
@@ -52,7 +54,18 @@ const {
  * @returns {import('../../models/finding').NormalisedFinding[]}
  */
 function runCryptoFailures(context) {
-  return runA04Rules(context);
+  const findings = [
+    ...runTransportSecurityA04(context),
+    ...runHstsAndWebsocketA04(context),
+    ...runCookieSecurityA04(context),
+    ...runSensitiveDataA04(context),
+  ];
+
+  return remapFindings(findings, {
+    fromCategory: 'A04',
+    toCategory: 'A02',
+    top10Url: A02_REF,
+  });
 }
 
 module.exports = {
@@ -60,7 +73,6 @@ module.exports = {
   runCryptoFailures,
 
   // ── Current public API (re-exported for consumers that want sub-runners) ──
-  runA04Rules,
   runTransportSecurityA04,
   runHstsAndWebsocketA04,
   runCookieSecurityA04,
