@@ -1,18 +1,18 @@
 /**
- * Provider Registry (Noi dang ky Nha cung cap)
+ * Provider Registry (Nơi đăng ký nhà cung cấp)
  *
- * Tao va ket noi tat ca cac nha cung cap cung voi LLM router.
- * Goi ham `buildLLMRouter()` mot lan khi khoi dong ung dung va truyen no vao `initOrchestrator()`.
+ * Tạo và kết nối tất cả các nhà cung cấp cùng với LLM router.
+ * Gọi hàm `buildLLMRouter()` một lần khi khởi động ứng dụng và truyền nó vào `initOrchestrator()`.
  *
- * NANG CAP v2:
- *  - Thu tu uu tien mac dinh: Groq -> Gemini -> OpenRouter -> Together -> HuggingFace
- *    (Groq mien phi, nhanh nhat; Gemini co flash mien phi)
- *  - readEnvConfig doc them VITE_LLM_MAX_OUTPUT_TOKENS de sync voi sentinelAI
+ * NÂNG CẤP v2:
+ *  - Thứ tự ưu tiên mặc định: Groq -> Gemini -> OpenRouter -> Together -> HuggingFace
+ *    (Groq miễn phí, nhanh nhất; Gemini có Flash miễn phí)
+ *  - readEnvConfig đọc thêm VITE_LLM_MAX_OUTPUT_TOKENS để sync với sentinelAI
  *
- * De them mot nha cung cap moi:
- *   1. Tao mot class implement LLMProvider trong thu muc providers/
- *   2. Import class do vao day va them vao mang `providers`
- *   3. Them id cua no vao VITE_LLM_PROVIDER_PRIORITY trong file .env
+ * Để thêm một nhà cung cấp mới:
+ *   1. Tạo một class implement LLMProvider trong thư mục providers/
+ *   2. Import class đó vào đây và thêm vào mảng `providers`
+ *   3. Thêm id của nó vào VITE_LLM_PROVIDER_PRIORITY trong file .env
  */
 
 import { LLMRouter } from './llmRouter.js';
@@ -24,7 +24,7 @@ import { OpenRouterProvider } from './providers/openrouterProvider.js';
 import { TogetherProvider } from './providers/togetherProvider.js';
 import { DEFAULT_ROUTER_CONFIG, RouterConfig } from './types';
 
-/** Doc cac cau hinh ghi de (tuy chon) tu bien moi truong Vite */
+/** Đọc các cấu hình ghi đè (tùy chọn) từ biến môi trường Vite */
 function readEnvConfig(): Partial<RouterConfig> {
   const cfg: Partial<RouterConfig> = {};
 
@@ -57,9 +57,9 @@ function readEnvConfig(): Partial<RouterConfig> {
 }
 
 /**
- * Xay dung va tra ve mot LLMRouter da duoc ket noi day du.
- * Thu tu provider: Groq -> Gemini -> OpenRouter -> Together -> HuggingFace
- * Cac nha cung cap khong co API key se co diem suc khoe (health score) = 0 va tu dong bi bo qua.
+ * Xây dựng và trả về một LLMRouter đã được kết nối đầy đủ.
+ * Thứ tự provider: Groq -> Gemini -> OpenRouter -> Together -> HuggingFace
+ * Các nhà cung cấp không có API key sẽ có điểm sức khỏe (health score) = 0 và tự động bị bỏ qua.
  */
 export function buildLLMRouter(): LLMRouter {
   const config  = { ...DEFAULT_ROUTER_CONFIG, ...readEnvConfig() };

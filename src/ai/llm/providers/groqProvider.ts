@@ -3,7 +3,7 @@
  *
  * Gói miễn phí: https://console.groq.com
  * Mô hình: llama-3.3-70b-versatile (nhanh, mạnh, miễn phí)
- * Bien moi truong: GROQ_API_KEY (doc trong Electron main process)
+ * Biến môi trường: GROQ_API_KEY (đọc trong Electron main process)
  *
  * FIX v2.1:
  *  - Đổi DEFAULT_MODEL từ llama3-8b-8192 (deprecated) → llama-3.3-70b-versatile

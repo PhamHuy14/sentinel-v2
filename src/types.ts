@@ -72,6 +72,7 @@ export interface ScanResult {
     techStack?: string[];
     cspAnalysis?: CspAnalysis;
     attackSurface?: AttackSurface;
+    coverageNotes?: string[];
   };
   error?: string;
 }

@@ -36,6 +36,7 @@ const PROBE_ROUTES = [
   '/phpinfo.php', '/.env', '/.git/config', '/.git/HEAD',
   '/config', '/graphql', '/console', '/web.config',
   '/server-status', '/server-info', '/.htaccess',
+  '/ftp', '/rest/admin/application-configuration',
 ];
 
 const STATIC_EXT_RE = /\.(css|js|png|jpg|jpeg|gif|svg|ico|woff2?|ttf|eot|mp4|webp|pdf|zip|gz|bmp|map)(\?.*)?$/i;
@@ -86,15 +87,22 @@ const SURFACE_WEIGHTS = {
   '/graphql': 2, '/debug': 3,
   '/.env': 5, '/.git/config': 5, '/.git/HEAD': 4, '/.htaccess': 3, '/web.config': 4,
   '/phpinfo.php': 4, '/server-status': 3, '/server-info': 3,
+  '/ftp': 3, '/rest/admin/application-configuration': 3,
   '/api/v1': 1, '/api/v2': 1, '/api/v3': 1,
 };
+
+function isConfirmedExposed(info) {
+  return !!info &&
+    (info.status === 200 || (info.status >= 300 && info.status < 400 && !info.redirectedToLogin)) &&
+    info.isExposed !== false;
+}
 
 function computeAttackSurface(surfaceStatus, crawledCount, formsCount) {
   const exposed = [];
   let score = 0;
 
   for (const [route, info] of Object.entries(surfaceStatus)) {
-    if (info.status === 200 || (info.status >= 300 && info.status < 400 && !info.redirectedToLogin)) {
+    if (isConfirmedExposed(info)) {
       const w = SURFACE_WEIGHTS[route] || 1;
       score += w;
       exposed.push({ route, status: info.status, weight: w });
@@ -129,6 +137,53 @@ function analyzeCsp(headers) {
 // BUG FIX: Phiên bản cũ không truyền `abortSignal` vào client.request() bên trong.
 // → Nhấn "Stop Scan" không cancel được giai đoạn probe route.
 // FIX: Thêm tham số abortSignal và truyền vào signal của mỗi request.
+function bodyPreview(text, limit = 180) {
+  return String(text || '').replace(/\s+/g, ' ').trim().slice(0, limit);
+}
+
+function looksLikeHtmlAppShell(text, contentType) {
+  const body = String(text || '');
+  const ct = String(contentType || '').toLowerCase();
+  if (!ct.includes('html')) return false;
+  return /<html[\s>]/i.test(body) &&
+    /<script[^>]+src=|<app-root|<base href=|main\.[\w-]+\.js|runtime\.[\w-]+\.js/i.test(body);
+}
+
+function classifyProbeRoute(route, status, contentType, text) {
+  if (status < 200 || status >= 400) return { isExposed: false, reason: `HTTP ${status}` };
+  if (status >= 300 && status < 400) return { isExposed: true, reason: 'Redirects without an obvious login gate' };
+
+  const body = String(text || '');
+  const ct = String(contentType || '').toLowerCase();
+  const htmlShell = looksLikeHtmlAppShell(body, ct);
+
+  const routeChecks = [
+    { re: /^\/\.env/i, match: /(?:^|\n)\s*[A-Z0-9_]{3,}\s*=\s*.+/m, reason: 'Response looks like an env file' },
+    { re: /^\/\.git\/config/i, match: /\[core\]|\[remote\s+"origin"\]|repositoryformatversion/i, reason: 'Response looks like .git/config' },
+    { re: /^\/\.git\/HEAD/i, match: /^ref:\s+refs\/heads\/|^[0-9a-f]{40}\s*$/im, reason: 'Response looks like .git/HEAD' },
+    { re: /phpinfo\.php$/i, match: /phpinfo\(\)|PHP Version|<title>\s*phpinfo\(\)/i, reason: 'Response contains phpinfo output' },
+    { re: /web\.config$/i, match: /<configuration[\s>]|<system\.webServer[\s>]/i, reason: 'Response looks like web.config XML' },
+    { re: /\.htaccess$/i, match: /RewriteEngine|AuthType|Require all|Deny from|Allow from/i, reason: 'Response looks like .htaccess' },
+    { re: /^\/actuator(?:\/|$)/i, match: /"_links"\s*:|"propertySources"\s*:|"activeProfiles"\s*:|"contexts"\s*:|management\.endpoints/i, reason: 'Response looks like Spring Actuator JSON' },
+    { re: /^\/graphql$/i, match: /"errors"\s*:|"data"\s*:|Cannot query field|GraphQL/i, reason: 'Response looks like GraphQL output' },
+    { re: /^\/swagger|^\/api-docs/i, match: /swagger-ui|openapi["\s:]+3|swagger["\s:]+["']?2|Swagger UI/i, reason: 'Response looks like Swagger/OpenAPI' },
+    { re: /^\/server-status/i, match: /Apache Server Status|Server Version|Current Time|Restart Time/i, reason: 'Response looks like Apache server-status' },
+    { re: /^\/server-info/i, match: /Apache Server Information|Module Name|Server Settings/i, reason: 'Response looks like Apache server-info' },
+    { re: /^\/ftp$/i, match: /<title>\s*listing directory|Index of\s+\/ftp|href=["'][^"']+\.(?:pdf|md|bak|zip)/i, reason: 'Response looks like a directory listing' },
+    { re: /^\/rest\/admin\/application-configuration$/i, match: /"config"\s*:\s*\{|"application"\s*:\s*\{|"server"\s*:\s*\{/i, reason: 'Response contains application configuration JSON' },
+  ];
+
+  const specific = routeChecks.find((check) => check.re.test(route));
+  if (specific) {
+    return specific.match.test(body)
+      ? { isExposed: true, reason: specific.reason }
+      : { isExposed: false, reason: htmlShell ? 'SPA fallback page, not the requested sensitive resource' : 'Missing expected content signature' };
+  }
+
+  if (htmlShell) return { isExposed: false, reason: 'SPA fallback page, not confirmed sensitive endpoint' };
+  return { isExposed: true, reason: 'HTTP 200 with non-SPA response' };
+}
+
 async function probeRoutesEnhanced(origin, requestHeaders, client, abortSignal) {
   const surfaceStatus = {};
   const BATCH = 12;
@@ -146,13 +201,18 @@ async function probeRoutesEnhanced(origin, requestHeaders, client, abortSignal) 
           signal: abortSignal,   // FIX: truyền signal để có thể abort
         });
         const location = res.response.headers.get('location') || '';
+        const contentType = res.response.headers.get('content-type') || '';
+        const exposure = classifyProbeRoute(route, res.response.status, contentType, res.text);
         surfaceStatus[route] = {
           status: res.response.status,
           redirectedToLogin: res.response.status >= 300 && res.response.status < 400 && /login|signin|account|auth/i.test(location),
           location,
           server:      res.response.headers.get('server')       || '',
-          contentType: res.response.headers.get('content-type') || '',
+          contentType,
           size:        res.text.length,
+          bodySnippet: bodyPreview(res.text),
+          isExposed: exposure.isExposed,
+          exposureReason: exposure.reason,
         };
       } catch {
         surfaceStatus[route] = { status: 0, redirectedToLogin: false, location: '' };
@@ -200,7 +260,7 @@ function checkVersionDisclosure(fingerprint, context) {
 
 function runGraphQlExposure(context) {
   const gql = (context.surfaceStatus || {})['/graphql'];
-  if (gql?.status === 200) {
+  if (isConfirmedExposed(gql)) {
     return [normalizeFinding({
       ruleId: 'A02-GRAPHQL-001', owaspCategory: 'A02',
       title: 'GraphQL endpoint public không có auth check rõ ràng',
@@ -217,7 +277,7 @@ function runGraphQlExposure(context) {
 
 function runGitExposure(surfaceStatus, origin) {
   const git = surfaceStatus['/.git/config'] || surfaceStatus['/.git/HEAD'];
-  if (git?.status === 200) {
+  if (isConfirmedExposed(git)) {
     return [normalizeFinding({
       ruleId: 'A02-GIT-001', owaspCategory: 'A02',
       title: '.git directory exposed — source code có thể bị leak',
@@ -234,7 +294,7 @@ function runGitExposure(surfaceStatus, origin) {
 
 function runEnvExposure(surfaceStatus, origin) {
   const env = surfaceStatus['/.env'];
-  if (env?.status === 200) {
+  if (isConfirmedExposed(env)) {
     return [normalizeFinding({
       ruleId: 'A02-ENV-001', owaspCategory: 'A02',
       title: '.env file exposed — credentials/secrets có thể bị leak',
@@ -253,7 +313,7 @@ function runActuatorExposure(surfaceStatus, origin) {
   const dangerous = ['/actuator/env', '/actuator'];
   const findings = [];
   for (const route of dangerous) {
-    if ((surfaceStatus[route]?.status ?? 0) === 200) {
+    if (isConfirmedExposed(surfaceStatus[route])) {
       findings.push(normalizeFinding({
         ruleId: 'A02-ACTUATOR-001', owaspCategory: 'A02',
         title: `Spring Boot Actuator endpoint ${route} exposed`,
@@ -267,6 +327,79 @@ function runActuatorExposure(surfaceStatus, origin) {
     }
   }
   return findings;
+}
+
+function runVerifiedExposureChecks(context) {
+  const surfaceStatus = context.surfaceStatus || {};
+  const findings = [];
+  const ftp = surfaceStatus['/ftp'];
+  if (isConfirmedExposed(ftp)) {
+    findings.push(normalizeFinding({
+      ruleId: 'A05-DIRLIST-VERIFIED-001',
+      owaspCategory: 'A05',
+      title: 'Public directory listing is reachable',
+      severity: context.isLocalhost ? 'low' : 'medium',
+      confidence: 'high',
+      target: `${context.origin}/ftp`,
+      location: '/ftp',
+      evidence: [
+        ftp.exposureReason || '/ftp returned a directory listing',
+        ftp.bodySnippet ? `Body preview: ${ftp.bodySnippet}` : '',
+      ].filter(Boolean),
+      remediation: 'Disable directory listing and require authorization for downloadable files that should not be public.',
+      references: ['https://owasp.org/Top10/2025/A05_2025-Security_Misconfiguration/'],
+      collector: 'blackbox',
+    }));
+  }
+
+  const config = surfaceStatus['/rest/admin/application-configuration'];
+  if (isConfirmedExposed(config)) {
+    findings.push(normalizeFinding({
+      ruleId: 'A01-CONFIG-EXPOSURE-001',
+      owaspCategory: 'A01',
+      title: 'Application configuration endpoint is publicly readable',
+      severity: context.isLocalhost ? 'low' : 'medium',
+      confidence: 'high',
+      target: `${context.origin}/rest/admin/application-configuration`,
+      location: '/rest/admin/application-configuration',
+      evidence: [
+        config.exposureReason || 'Application configuration endpoint returned JSON',
+        config.bodySnippet ? `Body preview: ${config.bodySnippet}` : '',
+      ].filter(Boolean),
+      remediation: 'Require server-side authorization for admin/configuration endpoints and avoid exposing deployment details to anonymous users.',
+      references: ['https://owasp.org/Top10/2025/A01_2025-Broken_Access_Control/'],
+      collector: 'blackbox',
+    }));
+  }
+
+  return findings;
+}
+
+function getUrlScanCoverageNotes(context) {
+  const auth = context.authSummary || {};
+  const notes = [
+    'URL Scan chỉ quan sát ứng dụng đang chạy qua HTTP request/response. Các lỗi cần đăng nhập, đổi role, thao tác giỏ hàng/checkout, upload hoặc flow nhiều bước có thể chưa được kích hoạt.',
+    'Ứng dụng SPA có nhiều API ẩn trong JavaScript hoặc chỉ gọi sau hành động UI. Nếu crawler không đi tới flow đó, scanner sẽ không có endpoint để fuzz.',
+    'Business logic, anti-automation/captcha, security-through-obscurity và lỗi phụ thuộc trạng thái dữ liệu thường cần kịch bản kiểm thử có trạng thái, không thể kết luận chỉ từ scan nặc danh.',
+    'Một số finding dạng SSRF/header/proxy là heuristic. Cần xác minh bằng log server hoặc endpoint nội bộ trước khi xem là khai thác thành công.',
+  ];
+  if (!auth.hasCookie && !auth.hasBearerToken) {
+    notes.unshift('Scan hiện không có cookie/token xác thực. Kết quả chủ yếu phản ánh bề mặt public, nên các lỗi sau đăng nhập có thể bị bỏ sót.');
+  }
+  return notes;
+}
+
+function getProjectScanCoverageNotes(context) {
+  const notes = [
+    'Project Scan là phân tích tĩnh/heuristic: tìm pattern rủi ro trong mã nguồn và config, nhưng không chứng minh chắc chắn endpoint có khai thác được ở runtime.',
+    'Các lỗi phụ thuộc dữ liệu seed, trạng thái phiên, role người dùng, checkout/payment, captcha hoặc chuỗi hành động nhiều bước vẫn cần URL scan có auth hoặc test case chuyên biệt.',
+    'Scanner bỏ qua thư mục nặng như node_modules, dist, build và có giới hạn số file đọc để tránh treo trên project lớn. Có thể tăng SENTINEL_PROJECT_MAX_FILES và SENTINEL_PROJECT_MAX_CODE_FILES khi cần quét sâu hơn.',
+    'Repo benchmark hoặc intentionally vulnerable app thường chứa cả test fixture/codefix. Findings trong thư mục test/codefix nên được phân loại lại trước khi tính là lỗi production.',
+  ];
+  if ((context.files || []).length >= Number.parseInt(process.env.SENTINEL_PROJECT_MAX_FILES || '2500', 10)) {
+    notes.unshift('Project có thể đã chạm giới hạn số file được walk. Một phần mã nguồn phía sau giới hạn có thể chưa được phân tích.');
+  }
+  return notes;
 }
 
 function detectProjectTechStack(context) {
@@ -404,7 +537,7 @@ async function runUrlScan(inputUrl, options = {}) {
     probeRoutesEnhanced(parsed.origin, requestHeaders, client, abortSignal),
   ]);
 
-  const accessibleCount = Object.values(surfaceStatus).filter(v => v.status === 200).length;
+  const accessibleCount = Object.values(surfaceStatus).filter(isConfirmedExposed).length;
   onProgress({
     stage: 'probe',
     msg: `Probe xong: ${accessibleCount}/${PROBE_ROUTES.length} route truy cập được`,
@@ -428,10 +561,13 @@ async function runUrlScan(inputUrl, options = {}) {
 
   const fingerprint = extractServerFingerprint(headers);
   const probeResults = Object.entries(surfaceStatus).map(([route, info]) => ({
+    route,
     url: `${parsed.origin}${route}`,
     status: info.status,
     contentType: info.contentType || '',
-    bodySnippet: '',
+    bodySnippet: info.bodySnippet || '',
+    isExposed: info.isExposed,
+    exposureReason: info.exposureReason || '',
   }));
 
   // ── Tech Stack + Attack Surface + CSP ────────────────────────
@@ -444,8 +580,10 @@ async function runUrlScan(inputUrl, options = {}) {
   }
   onProgress({ stage: 'probe', msg: `Điểm attack surface: ${attackSurface.score}/100`, level: attackSurface.score > 40 ? 'warn' : 'info', ts: Date.now() });
 
+  const pageTitle = (text.match(/<title>(.*?)<\/title>/i)?.[1] || '').trim();
   const context = {
     scannedUrl: parsed.toString(), finalUrl, origin: parsed.origin,
+    title: pageTitle,
     queryString: parsed.search || '',
     method: 'GET',
     protocol: parsed.protocol, hostname, isLocalhost,
@@ -468,6 +606,7 @@ async function runUrlScan(inputUrl, options = {}) {
   findings.push(...runGitExposure(surfaceStatus, parsed.origin));
   findings.push(...runEnvExposure(surfaceStatus, parsed.origin));
   findings.push(...runActuatorExposure(surfaceStatus, parsed.origin));
+  findings.push(...runVerifiedExposureChecks(context));
 
   onProgress({
     stage: 'analyze',
@@ -512,7 +651,7 @@ async function runUrlScan(inputUrl, options = {}) {
     ok: true, mode: 'url-scan',
     scannedUrl: parsed.toString(), finalUrl,
     status: response.status,
-    title: (text.match(/<title>(.*?)<\/title>/i)?.[1] || '').trim(),
+    title: pageTitle,
     findings,
     metadata: {
       headers: toHeaderObject(headers),
@@ -524,6 +663,7 @@ async function runUrlScan(inputUrl, options = {}) {
       techStack,
       cspAnalysis,
       attackSurface,
+      coverageNotes: getUrlScanCoverageNotes(context),
       summary,
     },
   };
@@ -546,7 +686,8 @@ async function runProjectScan(folderPath, options = {}) {
     return { ok: false, error: 'Scan đã bị hủy.', findings: [], metadata: { summary: { total: 0, byCategory: {}, bySeverity: {} } } };
   }
 
-  const files = walkFiles(folderPath, 600);
+  const maxFiles = options.maxFiles || options.projectMaxFiles || process.env.SENTINEL_PROJECT_MAX_FILES || 2500;
+  const files = walkFiles(folderPath, { maxFiles });
   onProgress({ stage: 'analyze', msg: `Tìm thấy ${files.length} files để phân tích`, level: 'info', ts: Date.now() });
 
   if (abortSignal?.aborted) {
@@ -623,6 +764,7 @@ async function runProjectScan(folderPath, options = {}) {
       csprojCount:      dependencyArtifacts.csprojFiles.length,
       configCount:      configFiles.length,
       techStack,
+      coverageNotes:    getProjectScanCoverageNotes(context),
       summary,
     },
   };
@@ -644,4 +786,13 @@ function getChecklist() {
   return { categories, designQuestions: getDesignChecklist() };
 }
 
-module.exports = { runUrlScan, runProjectScan, getChecklist };
+module.exports = {
+  runUrlScan,
+  runProjectScan,
+  getChecklist,
+  _internals: {
+    classifyProbeRoute,
+    computeAttackSurface,
+    isConfirmedExposed,
+  },
+};

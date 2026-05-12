@@ -3,7 +3,7 @@
  *
  * Gói miễn phí: https://api.together.xyz
  * Mô hình: meta-llama/Llama-3.3-70B-Instruct-Turbo-Free (MIỄN PHÍ hoàn toàn)
- * Bien moi truong: TOGETHER_API_KEY (doc trong Electron main process)
+ * Biến môi trường: TOGETHER_API_KEY (đọc trong Electron main process)
  *
  * FIX v2.1:
  *  - Đổi model mặc định: Qwen/Qwen2.5-72B-Instruct-Turbo (tốn credit)

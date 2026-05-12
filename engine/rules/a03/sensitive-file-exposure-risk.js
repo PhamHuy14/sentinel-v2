@@ -51,6 +51,7 @@ function runSensitiveFileExposureRisk(context) {
   const findings = [];
   try {
     const sourceFiles = context.sourceFiles || [];
+    if (!context.repoRoot && sourceFiles.length === 0) return findings;
 
     // ── A03-FILE-001: Backup / temp files trong source tree ─────────────────
     for (const filePath of sourceFiles) {

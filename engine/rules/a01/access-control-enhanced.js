@@ -266,6 +266,7 @@ function runSensitiveEndpointExposure(context) {
   for (const [path, meta] of Object.entries(SENSITIVE_ENDPOINTS)) {
     const info = surfaceStatus[path];
     if (!info || !info.status) continue;
+    if (info.isExposed === false) continue;
 
     // ── 200 OK và không chuyển hướng tới trang đăng nhập ─────────────────────
     if (info.status === 200 && !info.redirectedToLogin) {

@@ -1,9 +1,18 @@
 const fs = require('fs');
 const path = require('path');
 
-const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'bin', 'obj', '.vs']);
+const DEFAULT_MAX_FILES = 2500;
+const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'bin', 'obj', '.vs', 'coverage', '.next', '.nuxt']);
 
-function walkFiles(root, maxFiles = 500) {
+function parsePositiveInt(value, fallback) {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function walkFiles(root, options = {}) {
+  const maxFiles = typeof options === 'number'
+    ? options
+    : parsePositiveInt(options.maxFiles ?? process.env.SENTINEL_PROJECT_MAX_FILES, DEFAULT_MAX_FILES);
   const out = [];
   function walk(dir) {
     if (out.length >= maxFiles) return;

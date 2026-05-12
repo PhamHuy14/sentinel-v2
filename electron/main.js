@@ -1,8 +1,33 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs   = require('fs/promises');
+const fsSync = require('fs');
 const { runUrlScan, runProjectScan, getChecklist } = require('../engine/scanner/scan-engine');
 const { buildJsonReport, buildHtmlReport, getSuggestedFilename } = require('../engine/report/report-engine');
+
+function loadLocalEnv() {
+  try {
+    const envPath = path.join(__dirname, '..', '.env');
+    if (!fsSync.existsSync(envPath)) return;
+    const raw = fsSync.readFileSync(envPath, 'utf8');
+    for (const line of raw.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eqIndex = trimmed.indexOf('=');
+      if (eqIndex === -1) continue;
+      const key = trimmed.slice(0, eqIndex).trim();
+      let value = trimmed.slice(eqIndex + 1).trim();
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+      }
+      if (!(key in process.env)) process.env[key] = value;
+    }
+  } catch {
+    // Ignore .env loading errors in main process
+  }
+}
+
+loadLocalEnv();
 
 function createWindow() {
   const win = new BrowserWindow({

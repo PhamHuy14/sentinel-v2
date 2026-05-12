@@ -3,7 +3,7 @@
  *
  * Gói miễn phí: https://huggingface.co/inference-api
  * Mô hình: meta-llama/Llama-3.1-8B-Instruct (Messages API, miễn phí)
- * Bien moi truong: HF_API_KEY (doc trong Electron main process)
+ * Biến môi trường: HF_API_KEY (đọc trong Electron main process)
  *
  * FIX v2.1:
  *  - Chuyển từ Legacy Text-Generation API → Messages API (OpenAI-compatible)

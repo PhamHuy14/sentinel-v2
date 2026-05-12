@@ -62,7 +62,7 @@ function runSensitiveFileExposure(context) {
   const probeResults = context.probeResults || [];
 
   for (const probe of probeResults) {
-    if (!probe || probe.status !== 200) continue;
+    if (!probe || probe.status !== 200 || probe.isExposed === false) continue;
 
     const contentType = String(probe.contentType || '').toLowerCase();
     const isTextContent =
@@ -89,6 +89,7 @@ function runSensitiveFileExposure(context) {
             `URL: ${probe.url}`,
             `HTTP Status: ${probe.status}`,
             `Content-Type: ${probe.contentType || 'unknown'}`,
+            probe.exposureReason ? `Verification: ${probe.exposureReason}` : '',
             probe.bodySnippet ? `Body preview: ${String(probe.bodySnippet).slice(0, 100)}...` : '',
           ].filter(Boolean),
           remediation: fp.remediation,

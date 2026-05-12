@@ -9,6 +9,7 @@ const { runAllA02Rules } = require('../rules/a02');
 // ── A03 ──────────────────────────────────────────────────────────────────────
 const { runAllA03Rules } = require('../rules/a03');
 const { runStructuredLogging } = require('../rules/source-enhanced/supply-chain-enhanced');
+const { runVulnerableAppSourceRules } = require('../rules/source-enhanced/vulnerable-app-source-rules');
 
 // ── A04 ──────────────────────────────────────────────────────────────────────
 const { runA04Rules } = require('../rules/a04');
@@ -60,15 +61,19 @@ function runUrlRules(context) {
 }
 
 function runProjectRules(context) {
+  const sourceOnly = (findings) => (findings || []).filter(f => f.collector === 'source');
   const findings = [
+    ...sourceOnly(runAllA02Rules(context)),
     ...runAllA03Rules(context),
     ...runA04Rules(context),
     ...runAllA05Rules(context),
     ...runAllA06Rules(context),
+    ...sourceOnly(runAllA07Rules(context)),
     ...runAllA08Rules(context),
     ...runAllA09Rules(context),
     ...runAllA10Rules(context),
     ...runStructuredLogging(context),
+    ...runVulnerableAppSourceRules(context),
     ...runGenericProjectChecks(context),
   ];
   return deduplicateFindings(findings);

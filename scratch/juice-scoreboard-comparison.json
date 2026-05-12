@@ -1,0 +1,388 @@
+{
+  "scoreboard": {
+    "total": 111,
+    "byChallengeCat": {
+      "Sensitive Data Exposure": 16,
+      "XSS": 9,
+      "Observability Failures": 4,
+      "Improper Input Validation": 12,
+      "Broken Access Control": 11,
+      "Vulnerable Components": 9,
+      "Broken Authentication": 9,
+      "Security through Obscurity": 3,
+      "Miscellaneous": 7,
+      "Insecure Deserialization": 3,
+      "Broken Anti Automation": 4,
+      "Injection": 11,
+      "Security Misconfiguration": 4,
+      "Cryptographic Issues": 5,
+      "Unvalidated Redirects": 2,
+      "XXE": 2
+    }
+  },
+  "url": {
+    "total": 11,
+    "byCat": {
+      "A01": 2,
+      "A02": 3,
+      "A05": 1,
+      "A10": 5
+    },
+    "bySev": {
+      "low": 5,
+      "medium": 1,
+      "high": 5
+    },
+    "top": [
+      {
+        "ruleId": "A01-EXPOSED-001",
+        "cat": "A01",
+        "sev": "low",
+        "conf": "high",
+        "title": "Endpoint metrics có thể truy cập mà không cần xác thực",
+        "loc": "/metrics"
+      },
+      {
+        "ruleId": "A02-HDR-003",
+        "cat": "A02",
+        "sev": "low",
+        "conf": "high",
+        "title": "Thiếu Content-Security-Policy (CSP)",
+        "loc": "response headers"
+      },
+      {
+        "ruleId": "A02-HDR-007",
+        "cat": "A02",
+        "sev": "low",
+        "conf": "high",
+        "title": "Thiếu Referrer-Policy header",
+        "loc": "response headers"
+      },
+      {
+        "ruleId": "A02-CORS-001",
+        "cat": "A02",
+        "sev": "medium",
+        "conf": "high",
+        "title": "CORS cho phép wildcard origin (*)",
+        "loc": "response headers"
+      },
+      {
+        "ruleId": "A05-DIRLIST-VERIFIED-001",
+        "cat": "A05",
+        "sev": "low",
+        "conf": "high",
+        "title": "Public directory listing is reachable",
+        "loc": "/ftp"
+      },
+      {
+        "ruleId": "A01-CONFIG-EXPOSURE-001",
+        "cat": "A01",
+        "sev": "low",
+        "conf": "high",
+        "title": "Application configuration endpoint is publicly readable",
+        "loc": "/rest/admin/application-configuration"
+      },
+      {
+        "ruleId": "A10-HEADER-SSRF",
+        "cat": "A10",
+        "sev": "high",
+        "conf": "medium",
+        "title": "Header-based SSRF qua X-Forwarded-For",
+        "loc": "header: X-Forwarded-For"
+      },
+      {
+        "ruleId": "A10-HEADER-SSRF",
+        "cat": "A10",
+        "sev": "high",
+        "conf": "medium",
+        "title": "Header-based SSRF qua X-Forwarded-Host",
+        "loc": "header: X-Forwarded-Host"
+      },
+      {
+        "ruleId": "A10-HEADER-SSRF",
+        "cat": "A10",
+        "sev": "high",
+        "conf": "medium",
+        "title": "Header-based SSRF qua X-Original-URL",
+        "loc": "header: X-Original-URL"
+      },
+      {
+        "ruleId": "A10-HEADER-SSRF",
+        "cat": "A10",
+        "sev": "high",
+        "conf": "medium",
+        "title": "Header-based SSRF qua X-Rewrite-URL",
+        "loc": "header: X-Rewrite-URL"
+      },
+      {
+        "ruleId": "A10-HEADER-SSRF",
+        "cat": "A10",
+        "sev": "high",
+        "conf": "medium",
+        "title": "Header-based SSRF qua Referer",
+        "loc": "header: Referer"
+      }
+    ]
+  },
+  "project": {
+    "total": 82,
+    "byCat": {
+      "A02": 2,
+      "A06": 8,
+      "A08": 10,
+      "A09": 3,
+      "A05": 9,
+      "A03": 34,
+      "A01": 15,
+      "A04": 1
+    },
+    "bySev": {
+      "medium": 22,
+      "high": 55,
+      "low": 3,
+      "critical": 2
+    },
+    "top": [
+      {
+        "ruleId": "A02-CRYPTO-001",
+        "cat": "A02",
+        "sev": "medium",
+        "conf": "medium",
+        "title": "Có dấu hiệu dùng hashing yếu (MD5/SHA1)",
+        "loc": "source/config"
+      },
+      {
+        "ruleId": "A02-JWT-001",
+        "cat": "A02",
+        "sev": "high",
+        "conf": "medium",
+        "title": "JWT có dấu hiệu cấu hình thuật toán yếu",
+        "loc": "source/config"
+      },
+      {
+        "ruleId": "A06-NPM-005",
+        "cat": "A06",
+        "sev": "high",
+        "conf": "high",
+        "title": "Không có lockfile (package-lock.json / yarn.lock / pnpm-lock.yaml)",
+        "loc": "package.json"
+      },
+      {
+        "ruleId": "A06-NODE-002",
+        "cat": "A06",
+        "sev": "low",
+        "conf": "high",
+        "title": "package.json không khai báo engines.node constraint",
+        "loc": "package.json → engines"
+      },
+      {
+        "ruleId": "A06-FILE-001",
+        "cat": "A06",
+        "sev": "medium",
+        "conf": "high",
+        "title": "File backup/temp \"coupons_2013.md.bak\" có trong source tree",
+        "loc": "C:\\Users\\Admin\\source\\OSWAP juice shop\\juice-shop\\ftp\\coupons_2013.md.bak"
+      },
+      {
+        "ruleId": "A06-FILE-001",
+        "cat": "A06",
+        "sev": "medium",
+        "conf": "high",
+        "title": "File backup/temp \"package-lock.json.bak\" có trong source tree",
+        "loc": "C:\\Users\\Admin\\source\\OSWAP juice shop\\juice-shop\\ftp\\package-lock.json.bak"
+      },
+      {
+        "ruleId": "A06-FILE-001",
+        "cat": "A06",
+        "sev": "medium",
+        "conf": "high",
+        "title": "File backup/temp \"package.json.bak\" có trong source tree",
+        "loc": "C:\\Users\\Admin\\source\\OSWAP juice shop\\juice-shop\\ftp\\package.json.bak"
+      },
+      {
+        "ruleId": "A06-FILE-002",
+        "cat": "A06",
+        "sev": "high",
+        "conf": "high",
+        "title": "File nhạy cảm \"ctf.key\" có thể chứa secrets bị commit vào source",
+        "loc": "C:\\Users\\Admin\\source\\OSWAP juice shop\\juice-shop\\ctf.key"
+      },
+      {
+        "ruleId": "A06-FILE-002",
+        "cat": "A06",
+        "sev": "high",
+        "conf": "high",
+        "title": "File nhạy cảm \"premium.key\" có thể chứa secrets bị commit vào source",
+        "loc": "C:\\Users\\Admin\\source\\OSWAP juice shop\\juice-shop\\encryptionkeys\\premium.key"
+      },
+      {
+        "ruleId": "A06-FILE-003",
+        "cat": "A06",
+        "sev": "medium",
+        "conf": "medium",
+        "title": ".gitignore thiếu pattern bảo vệ cho sensitive files",
+        "loc": ".gitignore"
+      },
+      {
+        "ruleId": "A08-CONFIG-001",
+        "cat": "A08",
+        "sev": "high",
+        "conf": "medium",
+        "title": "Unsafe dynamic execution: eval()",
+        "loc": "C:\\Users\\Admin\\source\\OSWAP juice shop\\juice-shop\\routes\\captcha.ts"
+      },
+      {
+        "ruleId": "A08-CONFIG-001",
+        "cat": "A08",
+        "sev": "critical",
+        "conf": "medium",
+        "title": "Unsafe dynamic execution: js-yaml yaml.load() không có SAFE_LOAD schema",
+        "loc": "C:\\Users\\Admin\\source\\OSWAP juice shop\\juice-shop\\routes\\fileUpload.ts"
+      },
+      {
+        "ruleId": "A08-CONFIG-001",
+        "cat": "A08",
+        "sev": "high",
+        "conf": "medium",
+        "title": "Unsafe dynamic execution: eval()",
+        "loc": "C:\\Users\\Admin\\source\\OSWAP juice shop\\juice-shop\\routes\\userProfile.ts"
+      },
+      {
+        "ruleId": "A08-CONFIG-001",
+        "cat": "A08",
+        "sev": "high",
+        "conf": "medium",
+        "title": "Unsafe dynamic execution: eval()",
+        "loc": "C:\\Users\\Admin\\source\\OSWAP juice shop\\juice-shop\\test\\cypress\\e2e\\basket.spec.ts"
+      },
+      {
+        "ruleId": "A08-CONFIG-001",
+        "cat": "A08",
+        "sev": "high",
+        "conf": "medium",
+        "title": "Unsafe dynamic execution: eval()",
+        "loc": "C:\\Users\\Admin\\source\\OSWAP juice shop\\juice-shop\\test\\cypress\\e2e\\contact.spec.ts"
+      },
+      {
+        "ruleId": "A08-CI-003",
+        "cat": "A08",
+        "sev": "medium",
+        "conf": "low",
+        "title": "CI/CD pipeline không có bước quét secret/credential bị commit nhầm",
+        "loc": "CI/CD pipeline config"
+      },
+      {
+        "ruleId": "A09-SENSITLOG-002",
+        "cat": "A09",
+        "sev": "critical",
+        "conf": "low",
+        "title": "PII có thể bị log: Credit card data có thể bị log",
+        "loc": "codebase"
+      },
+      {
+        "ruleId": "A09-LOG-PASSWORD-CHANGE-001",
+        "cat": "A09",
+        "sev": "medium",
+        "conf": "low",
+        "title": "Có Password change / reset nhưng không thấy log security event tương ứng",
+        "loc": "codebase"
+      },
+      {
+        "ruleId": "A09-LOG-CONTEXT-001",
+        "cat": "A09",
+        "sev": "low",
+        "conf": "low",
+        "title": "Log thiếu context fields quan trọng (userId, requestId, IP)",
+        "loc": "codebase"
+      },
+      {
+        "ruleId": "A05-DIRLIST-SRC-001",
+        "cat": "A05",
+        "sev": "medium",
+        "conf": "high",
+        "title": "Directory Listing bật qua serveIndex(...)",
+        "loc": "C:\\Users\\Admin\\source\\OSWAP juice shop\\juice-shop\\data\\static\\codefixes\\accessLogDisclosureChallenge_1_correct.ts"
+      },
+      {
+        "ruleId": "A05-DIRLIST-SRC-001",
+        "cat": "A05",
+        "sev": "medium",
+        "conf": "high",
+        "title": "Directory Listing bật qua serveIndex(...)",
+        "loc": "C:\\Users\\Admin\\source\\OSWAP juice shop\\juice-shop\\data\\static\\codefixes\\accessLogDisclosureChallenge_2.ts"
+      },
+      {
+        "ruleId": "A05-DIRLIST-SRC-001",
+        "cat": "A05",
+        "sev": "medium",
+        "conf": "high",
+        "title": "Directory Listing bật qua serveIndex(...)",
+        "loc": "C:\\Users\\Admin\\source\\OSWAP juice shop\\juice-shop\\data\\static\\codefixes\\accessLogDisclosureChallenge_3.ts"
+      },
+      {
+        "ruleId": "A05-DIRLIST-SRC-001",
+        "cat": "A05",
+        "sev": "medium",
+        "conf": "high",
+        "title": "Directory Listing bật qua serveIndex(...)",
+        "loc": "C:\\Users\\Admin\\source\\OSWAP juice shop\\juice-shop\\data\\static\\codefixes\\accessLogDisclosureChallenge_4.ts"
+      },
+      {
+        "ruleId": "A05-DIRLIST-SRC-001",
+        "cat": "A05",
+        "sev": "medium",
+        "conf": "high",
+        "title": "Directory Listing bật qua serveIndex(...)",
+        "loc": "C:\\Users\\Admin\\source\\OSWAP juice shop\\juice-shop\\data\\static\\codefixes\\directoryListingChallenge_1_correct.ts"
+      },
+      {
+        "ruleId": "A05-DIRLIST-SRC-001",
+        "cat": "A05",
+        "sev": "medium",
+        "conf": "high",
+        "title": "Directory Listing bật qua serveIndex(...)",
+        "loc": "C:\\Users\\Admin\\source\\OSWAP juice shop\\juice-shop\\data\\static\\codefixes\\directoryListingChallenge_2.ts"
+      },
+      {
+        "ruleId": "A05-DIRLIST-SRC-001",
+        "cat": "A05",
+        "sev": "medium",
+        "conf": "high",
+        "title": "Directory Listing bật qua serveIndex(...)",
+        "loc": "C:\\Users\\Admin\\source\\OSWAP juice shop\\juice-shop\\data\\static\\codefixes\\directoryListingChallenge_3.ts"
+      },
+      {
+        "ruleId": "A05-DIRLIST-SRC-001",
+        "cat": "A05",
+        "sev": "medium",
+        "conf": "high",
+        "title": "Directory Listing bật qua serveIndex(...)",
+        "loc": "C:\\Users\\Admin\\source\\OSWAP juice shop\\juice-shop\\data\\static\\codefixes\\directoryListingChallenge_4.ts"
+      },
+      {
+        "ruleId": "A03-NOSQLI-SRC-001",
+        "cat": "A03",
+        "sev": "high",
+        "conf": "medium",
+        "title": "NoSQL query dùng object từ request trực tiếp",
+        "loc": "C:\\Users\\Admin\\source\\OSWAP juice shop\\juice-shop\\data\\static\\codefixes\\forgedReviewChallenge_1.ts"
+      },
+      {
+        "ruleId": "A03-NOSQLI-SRC-001",
+        "cat": "A03",
+        "sev": "high",
+        "conf": "medium",
+        "title": "NoSQL query dùng object từ request trực tiếp",
+        "loc": "C:\\Users\\Admin\\source\\OSWAP juice shop\\juice-shop\\data\\static\\codefixes\\forgedReviewChallenge_2_correct.ts"
+      },
+      {
+        "ruleId": "A03-NOSQLI-SRC-001",
+        "cat": "A03",
+        "sev": "high",
+        "conf": "medium",
+        "title": "NoSQL query dùng object từ request trực tiếp",
+        "loc": "C:\\Users\\Admin\\source\\OSWAP juice shop\\juice-shop\\data\\static\\codefixes\\forgedReviewChallenge_3.ts"
+      }
+    ]
+  }
+}

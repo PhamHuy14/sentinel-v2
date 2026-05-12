@@ -3,7 +3,7 @@
  *
  * Gói miễn phí: https://aistudio.google.com
  * Mô hình: gemini-2.0-flash (model mới nhất, nhanh, miễn phí)
- * Bien moi truong: GEMINI_API_KEY (doc trong Electron main process)
+ * Biến môi trường: GEMINI_API_KEY (đọc trong Electron main process)
  *
  * FIX v2.1:
  *  - Đổi model mặc định: gemini-1.5-flash → gemini-2.0-flash (mới hơn, tốt hơn)

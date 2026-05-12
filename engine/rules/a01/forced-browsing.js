@@ -62,6 +62,7 @@ function runForcedBrowsing(context) {
   for (const { path, title, severity } of FORCED_BROWSING_PATHS) {
     const info = surfaceStatus[path];
     if (!info || !info.status) continue;
+    if (info.isExposed === false) continue;
 
     // ── 200: Truy cập trực tiếp được ───────────────────────────────────────────
     if (info.status === 200 && !info.redirectedToLogin) {

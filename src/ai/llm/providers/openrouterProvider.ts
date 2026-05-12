@@ -3,7 +3,7 @@
  *
  * Gói miễn phí: https://openrouter.ai
  * Mô hình: meta-llama/llama-3.3-70b-instruct:free (chất lượng cao, miễn phí)
- * Bien moi truong: OPENROUTER_API_KEY (doc trong Electron main process)
+ * Biến môi trường: OPENROUTER_API_KEY (đọc trong Electron main process)
  *
  * FIX v2.1:
  *  - Đổi model mặc định: llama-3.1-8b-instruct:free → llama-3.3-70b-instruct:free

@@ -7,13 +7,13 @@ import { ChecklistItem, sevColor } from './ChecklistPanel';
 const SEV_ORDER: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
 
 const DESIGN_QUESTIONS = [
-  'Co threat model cho login, thanh toan, admin va thao tac destructive.',
+  'Có threat model cho login, thanh toán, admin và thao tác destructive.',
   'Có abuse cases cho brute force, IDOR, privilege escalation và SSRF.',
   'Có trust boundary rõ ràng giữa client, API, DB và bên thứ ba.',
   'Có rate limiting/throttling cho endpoint nhạy cảm.',
   'Có default deny và least privilege cho route và dữ liệu.',
   'Có fail-safe behavior khi timeout, parse lỗi hoặc service phụ bị lỗi.',
-  'Co data classification cho PII, token, credentials va secret.',
+  'Có data classification cho PII, token, credentials và secret.',
   'Có security review trước release và ghi lại decision quan trọng.',
 ];
 
@@ -24,23 +24,23 @@ const DESIGN_DETAILS: Record<number, { todos: string[]; recommend: string }> = {
   },
   1: {
     todos: ['Viết abuse case tương ứng với user story', 'Thêm test cho IDOR/brute force', 'Gán owner cho từng control'],
-    recommend: 'Checklist tot nhat la checklist co test hoac bang chung kem theo.',
+    recommend: 'Checklist tốt nhất là checklist có test hoặc bằng chứng kèm theo.',
   },
   2: {
     todos: ['Đánh dấu input untrusted tại mọi boundary', 'Validate server-side', 'Review OAuth/webhook/payment integration'],
     recommend: 'Mỗi boundary nên có validation, auth, logging và error handling rõ ràng.',
   },
   3: {
-    todos: ['Rate limit login/register/reset password', 'Ket hop IP + account key', 'Canh bao khi co pattern bat thuong'],
+    todos: ['Rate limit login/register/reset password', 'Kết hợp IP + account key', 'Cảnh báo khi có pattern bất thường'],
     recommend: 'Dùng backoff mềm thay vì lockout cứng nếu trải nghiệm người dùng quan trọng.',
   },
   4: {
     todos: ['Mặc định route phải cần auth', 'Check role/permission ở server', 'Không đưa authorization logic vào client'],
-    recommend: 'Policy/guard tap trung giup tranh bo sot endpoint moi.',
+    recommend: 'Policy/guard tập trung giúp tránh bỏ sót endpoint mới.',
   },
   5: {
-    todos: ['Tra generic error cho client', 'Log chi tiet o server', 'Test timeout va malformed input'],
-    recommend: 'Fail closed voi authz/payment/admin flow.',
+    todos: ['Trả generic error cho client', 'Log chi tiết ở server', 'Test timeout và malformed input'],
+    recommend: 'Fail closed với authz/payment/admin flow.',
   },
   6: {
     todos: ['Không log secret/PII', 'Mã hóa dữ liệu nhạy cảm', 'Đặt retention và xóa dữ liệu hết hạn'],
@@ -48,7 +48,7 @@ const DESIGN_DETAILS: Record<number, { todos: string[]; recommend: string }> = {
   },
   7: {
     todos: ['Đặt security review trong Definition of Done', 'Ghi risk acceptance nếu chưa fix', 'Review lại sau mỗi release lớn'],
-    recommend: 'Dung OWASP ASVS Level 1 lam baseline thuc te.',
+    recommend: 'Dùng OWASP ASVS Level 1 làm baseline thực tế.',
   },
 };
 
@@ -102,7 +102,7 @@ function buildFindingActions(findings: Finding[]) {
       label: `${finding.ruleId} - ${finding.title}`,
       meta: `${formatOwaspCategory(finding.owaspCategory)} | ${finding.collector}`,
       todos: [
-        finding.target ? `Xac minh target: ${finding.target}` : 'Xac minh pham vi anh huong.',
+        finding.target ? `Xác minh target: ${finding.target}` : 'Xác minh phạm vi ảnh hưởng.',
         finding.location ? `Kiểm tra vị trí: ${finding.location}` : 'Xác định vị trí code/config/runtime liên quan.',
         finding.evidence?.[0] ? `Đối chiếu evidence: ${finding.evidence[0]}` : 'Bổ sung bằng chứng tái hiện nếu cần.',
       ],

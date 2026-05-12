@@ -1,0 +1,205 @@
+{
+  "ok": true,
+  "total": 14,
+  "metadata": {
+    "scannedFiles": 603,
+    "packageJsonFound": true,
+    "csprojCount": 0,
+    "configCount": 60,
+    "techStack": [
+      "Node.js",
+      "Angular"
+    ],
+    "summary": {
+      "total": 14,
+      "byCategory": {
+        "A04": 2,
+        "A06": 5,
+        "A08": 1,
+        "A09": 6
+      },
+      "bySeverity": {
+        "medium": 5,
+        "high": 3,
+        "low": 6
+      }
+    }
+  },
+  "byRule": {
+    "A04-DESIGN-001": 1,
+    "A06-FILE-002": 2,
+    "A06-FILE-003": 1,
+    "A06-NODE-002": 1,
+    "A06-NPM-005": 1,
+    "A08-CI-003": 1,
+    "A09-ALERT-004": 1,
+    "A09-LOG-CONTEXT-001": 1,
+    "A09-LOG-LOGOUT-001": 1,
+    "A09-LOG-PASSWORD-CHANGE-001": 1,
+    "A09-LOG-STRUCT-001": 1,
+    "A09-STRUCT-001": 1,
+    "GEN-SCALE-001": 1
+  },
+  "findings": [
+    {
+      "ruleId": "A04-DESIGN-001",
+      "category": "A04",
+      "severity": "medium",
+      "title": "Chưa thấy artifact threat model/security design cho luồng nhạy cảm",
+      "target": "C:/Users/Admin/source/OSWAP juice shop/juice-shop",
+      "location": "project documentation",
+      "evidence": [
+        "Project có dấu hiệu luồng auth/admin/payment/destructive nhưng không thấy threat model, security design, ADR hoặc abuse-case doc."
+      ]
+    },
+    {
+      "ruleId": "A06-NPM-005",
+      "category": "A06",
+      "severity": "high",
+      "title": "Không có lockfile (package-lock.json / yarn.lock / pnpm-lock.yaml)",
+      "target": "C:\\Users\\Admin\\source\\OSWAP juice shop\\juice-shop\\frontend\\package.json",
+      "location": "package.json",
+      "evidence": [
+        "Không tìm thấy lockfile trong cùng thư mục với package.json"
+      ]
+    },
+    {
+      "ruleId": "A06-NODE-002",
+      "category": "A06",
+      "severity": "low",
+      "title": "package.json không khai báo engines.node constraint",
+      "target": "C:\\Users\\Admin\\source\\OSWAP juice shop\\juice-shop\\frontend\\package.json",
+      "location": "package.json → engines",
+      "evidence": [
+        "Không có field \"engines.node\" trong package.json"
+      ]
+    },
+    {
+      "ruleId": "A06-FILE-002",
+      "category": "A06",
+      "severity": "high",
+      "title": "File nhạy cảm \"ctf.key\" có thể chứa secrets bị commit vào source",
+      "target": "C:\\Users\\Admin\\source\\OSWAP juice shop\\juice-shop\\ctf.key",
+      "location": "C:\\Users\\Admin\\source\\OSWAP juice shop\\juice-shop\\ctf.key",
+      "evidence": [
+        "private key or certificate: C:\\Users\\Admin\\source\\OSWAP juice shop\\juice-shop\\ctf.key"
+      ]
+    },
+    {
+      "ruleId": "A06-FILE-002",
+      "category": "A06",
+      "severity": "high",
+      "title": "File nhạy cảm \"premium.key\" có thể chứa secrets bị commit vào source",
+      "target": "C:\\Users\\Admin\\source\\OSWAP juice shop\\juice-shop\\encryptionkeys\\premium.key",
+      "location": "C:\\Users\\Admin\\source\\OSWAP juice shop\\juice-shop\\encryptionkeys\\premium.key",
+      "evidence": [
+        "private key or certificate: C:\\Users\\Admin\\source\\OSWAP juice shop\\juice-shop\\encryptionkeys\\premium.key"
+      ]
+    },
+    {
+      "ruleId": "A06-FILE-003",
+      "category": "A06",
+      "severity": "medium",
+      "title": ".gitignore thiếu pattern bảo vệ cho sensitive files",
+      "target": "C:/Users/Admin/source/OSWAP juice shop/juice-shop/.gitignore",
+      "location": ".gitignore",
+      "evidence": [
+        "Thiếu pattern cho: .env* files",
+        "Thiếu pattern cho: *.pem certificates"
+      ]
+    },
+    {
+      "ruleId": "A08-CI-003",
+      "category": "A08",
+      "severity": "medium",
+      "title": "CI/CD pipeline không có bước quét secret/credential bị commit nhầm",
+      "target": "C:\\Users\\Admin\\source\\OSWAP juice shop\\juice-shop\\.github\\workflows\\ci.yml",
+      "location": "CI/CD pipeline config",
+      "evidence": [
+        "Không phát hiện secret scanner (TruffleHog, Gitleaks, detect-secrets) trong workflow."
+      ]
+    },
+    {
+      "ruleId": "A09-LOG-LOGOUT-001",
+      "category": "A09",
+      "severity": "medium",
+      "title": "Có Logout / Session invalidation nhưng không thấy log security event tương ứng",
+      "target": "project source",
+      "location": "codebase",
+      "evidence": [
+        "Phát hiện code Logout / Session invalidation nhưng không thấy logging cho event này.",
+        "Thiếu logging security event khiến không thể phát hiện tấn công, điều tra sự cố, hoặc đáp ứng compliance."
+      ]
+    },
+    {
+      "ruleId": "A09-LOG-PASSWORD-CHANGE-001",
+      "category": "A09",
+      "severity": "medium",
+      "title": "Có Password change / reset nhưng không thấy log security event tương ứng",
+      "target": "project source",
+      "location": "codebase",
+      "evidence": [
+        "Phát hiện code Password change / reset nhưng không thấy logging cho event này.",
+        "Thiếu logging security event khiến không thể phát hiện tấn công, điều tra sự cố, hoặc đáp ứng compliance."
+      ]
+    },
+    {
+      "ruleId": "A09-LOG-STRUCT-001",
+      "category": "A09",
+      "severity": "low",
+      "title": "Logging có thể không dùng structured format (JSON) — khó parse bởi SIEM",
+      "target": "project source",
+      "location": "codebase",
+      "evidence": [
+        "Có logging nhưng không thấy dấu hiệu structured/JSON logging.",
+        "Log plain text không thể parse tự động bởi SIEM/ELK → không thể alert tự động."
+      ]
+    },
+    {
+      "ruleId": "A09-LOG-CONTEXT-001",
+      "category": "A09",
+      "severity": "low",
+      "title": "Log thiếu context fields quan trọng (userId, requestId, IP)",
+      "target": "project source",
+      "location": "codebase",
+      "evidence": [
+        "Không thấy: requestId/traceId trong log, IP address trong log trong log statements.",
+        "Log thiếu context không thể dùng để điều tra sự cố hoặc trace attack chain."
+      ]
+    },
+    {
+      "ruleId": "A09-ALERT-004",
+      "category": "A09",
+      "severity": "low",
+      "title": "Security event được log bằng console.log thay vì logging framework",
+      "target": "project source",
+      "location": "codebase",
+      "evidence": [
+        "console.log được dùng cho security-related messages (auth, token, error).",
+        "console.log không hỗ trợ: log level, structured format, centralized shipping, log rotation."
+      ]
+    },
+    {
+      "ruleId": "A09-STRUCT-001",
+      "category": "A09",
+      "severity": "low",
+      "title": "Sử dụng console.log thay vì logger có cấu trúc",
+      "target": "project source",
+      "location": "codebase",
+      "evidence": [
+        "Phát hiện console.log nhưng không thấy winston/pino/bunyan hoặc tương đương"
+      ]
+    },
+    {
+      "ruleId": "GEN-SCALE-001",
+      "category": "A04",
+      "severity": "low",
+      "title": "Project kích thước lớn - cần security review toàn diện",
+      "target": "project scale",
+      "location": "project metrics",
+      "evidence": [
+        "Project có 603 files - kích thước lớn, cần design review."
+      ]
+    }
+  ]
+}

@@ -11,13 +11,13 @@ const OWASP_CATS = Object.entries(OWASP_2025_CATEGORIES).map(([id, name]) => ({
   desc: {
     A01: 'Kiểm soát truy cập, IDOR, forced browsing, privilege escalation.',
     A02: 'Mã hóa, TLS, cookie flags, dữ liệu nhạy cảm và secret.',
-    A03: 'SQLi, XSS, command injection va cac loi xu ly input.',
+    A03: 'SQLi, XSS, command injection và các lỗi xử lý input.',
     A04: 'Thiết kế thiếu threat model, abuse case, rate limit hoặc deny-by-default.',
     A05: 'Cấu hình sai, debug/default endpoint, CORS, headers và exposure.',
-    A06: 'Dependency, framework, runtime cu hoac co CVE.',
+    A06: 'Dependency, framework, runtime cũ hoặc có CVE.',
     A07: 'Authentication, session, reset password, JWT, MFA.',
     A08: 'Supply-chain, CI/CD, integrity, deserialization, update trust.',
-    A09: 'Logging, audit trail, monitoring va alerting.',
+    A09: 'Logging, audit trail, monitoring và alerting.',
     A10: 'SSRF và request tới tài nguyên nội bộ/metadata.',
   }[id] || '',
 }));
@@ -41,7 +41,7 @@ export const CONTEXT_ITEM_DETAILS: Record<string, { todos: string[]; recommend: 
   },
   'ctx-php-debug': {
     todos: ['Đặt APP_DEBUG=false', 'Tắt display_errors', 'Chặn debugbar/telescope public'],
-    recommend: 'Debug mode co the lo stack trace, query va credentials.',
+    recommend: 'Debug mode có thể lộ stack trace, query và credentials.',
   },
   'ctx-generic-design': {
     todos: ['Review auth/authz boundary', 'Kiểm tra input validation', 'Lập kế hoạch fix theo severity'],
@@ -149,7 +149,7 @@ export const ChecklistItem: React.FC<ChecklistItemProps> = ({
           )}
           {recommend && (
             <div className="chk-detail-section">
-              <div className="chk-detail-label">Khuyen nghi</div>
+              <div className="chk-detail-label">Khuyến nghị</div>
               <div className="chk-recommend-text">{recommend}</div>
             </div>
           )}
@@ -225,7 +225,7 @@ export const ChecklistPanel: React.FC = () => {
         <div className="section-label">OWASP Top 10</div>
         <div className="chk-coverage">
           <div className="chk-coverage-hdr">
-            <span>Do bao phu</span>
+            <span>Độ bao phủ</span>
             <span className="chk-coverage-frac">{covered}/{total}</span>
           </div>
           <div className="chk-coverage-track">
@@ -257,7 +257,7 @@ export const ChecklistPanel: React.FC = () => {
 
       <div className="section">
         <div className="chk-section-header">
-          <div className="section-label" style={{ marginBottom: 0 }}>Theo cong nghe</div>
+          <div className="section-label" style={{ marginBottom: 0 }}>Theo công nghệ</div>
           <button type="button" className="btn-checklist-toggle" onClick={() => setHideCompleted((v) => !v)}>
             {hideCompleted ? 'Hiện tất cả' : 'Ẩn đã xong'}
           </button>
