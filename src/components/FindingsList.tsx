@@ -1,6 +1,7 @@
 import { useStore } from '../store/useStore';
 import { ReportExportButton } from './ReportExportButton';
 import { Finding } from '../types';
+import { formatOwaspCategory } from '../utils/owasp';
 
 const severityColor = (sev: string) => {
   switch (sev) {
@@ -81,7 +82,7 @@ export const FindingsList: React.FC = () => {
                 <span className="rule-id">{finding.ruleId}</span>
               </div>
               <div className="finding-meta">
-                <span>OWASP: {finding.owaspCategory}</span>
+                <span>OWASP: {formatOwaspCategory(finding.owaspCategory)}</span>
                 <span>Confidence: {finding.confidence}</span>
                 <span>Collector: {finding.collector}</span>
               </div>

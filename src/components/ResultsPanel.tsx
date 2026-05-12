@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAIStore } from '../store/useAIStore';
 import { useStore } from '../store/useStore';
 import { Finding } from '../types';
+import { formatOwaspCategory } from '../utils/owasp';
 import { ReportExportButton } from './ReportExportButton';
 import { RiskDashboard } from './RiskDashboard';
 
@@ -42,7 +43,7 @@ const FindingDrawer: React.FC<{ finding: Finding | null; onClose: () => void }> 
 
         {/* Meta row */}
         <div className="finding-drawer-meta">
-          <span className="badge badge-cat">{finding.owaspCategory}</span>
+          <span className="badge badge-cat">{formatOwaspCategory(finding.owaspCategory)}</span>
           {isFuzzer && <span className="badge badge-fuzzer">Fuzzer</span>}
           <span className={`conf-badge ${confClass(finding.confidence)}`}>
             Độ tin cậy: {finding.confidence}
@@ -109,7 +110,7 @@ const FindingsTable: React.FC<{
         <tr>
           <th style={{ width: 88 }}>Mức độ</th>
           <th>Lỗ hổng</th>
-          <th style={{ width: 76 }}>Danh mục</th>
+          <th style={{ width: 210 }}>Danh mục</th>
           <th style={{ width: 190 }}>Vị trí</th>
           <th style={{ width: 128 }}>Trạng thái</th>
           <th style={{ width: 96 }}>Hành động</th>
@@ -126,7 +127,7 @@ const FindingsTable: React.FC<{
                 <div className="finding-rule">{f.ruleId}</div>
                 <div className="finding-title-table">{f.title}</div>
               </td>
-              <td><span className="badge badge-cat">{f.owaspCategory}</span></td>
+              <td><span className="badge badge-cat">{formatOwaspCategory(f.owaspCategory)}</span></td>
               <td className="finding-target" title={f.target || f.location}>
                 {f.target || f.location || '—'}
               </td>
@@ -222,7 +223,8 @@ export const ResultsPanel: React.FC = () => {
     .filter((f) => filterSev === 'all' || f.severity === filterSev)
     .filter((f) => !searchQ ||
       f.title.toLowerCase().includes(searchQ.toLowerCase()) ||
-      f.ruleId.toLowerCase().includes(searchQ.toLowerCase()))
+      f.ruleId.toLowerCase().includes(searchQ.toLowerCase()) ||
+      formatOwaspCategory(f.owaspCategory).toLowerCase().includes(searchQ.toLowerCase()))
     .sort((a, b) =>
       sortBy === 'severity'
         ? SEV_ORDER[b.severity] - SEV_ORDER[a.severity]

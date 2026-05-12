@@ -3,6 +3,7 @@ import { AIChatMessage, AiQueryPayload, genMsgId, HISTORY_TURNS, INPUT_PLACEHOLD
 import { getOrchestrator } from '../ai/llm/hybridOrchestrator.js';
 import { useAIStore } from '../store/useAIStore';
 import { useStore } from '../store/useStore';
+import { formatOwaspCategory } from '../utils/owasp';
 
 // Mở rộng AIChatMessage để mang theo thông tin debug provider
 interface ExtendedAIChatMessage extends AIChatMessage {
@@ -831,7 +832,7 @@ export function AIChatWidget() {
                     <div className="ai-finding-tag">
                       <span className={`ai-sev-dot ai-sev-dot--${msg.findingContext.severity}`} />
                       <span className="ai-finding-title">{msg.findingContext.title}</span>
-                      <span className="ai-finding-owasp">{msg.findingContext.owaspCategory.toUpperCase()}</span>
+                      <span className="ai-finding-owasp">{formatOwaspCategory(msg.findingContext.owaspCategory)}</span>
                     </div>
                   )}
                   <div

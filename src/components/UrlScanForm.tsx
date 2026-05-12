@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useStore } from '../store/useStore';
+import { URL_SCAN_COVERAGE } from '../utils/owasp';
 
 const DEPTH_OPTIONS = [
   { value: 0, label: 'Chỉ trang gốc',   desc: 'Chỉ quét đúng URL bạn nhập vào — nhanh nhất' },
@@ -39,6 +40,22 @@ export const UrlScanForm: React.FC = () => {
       </div>
 
       {/* ── Mục tiêu ── */}
+      <div className="scan-scope-notice">
+        <div>
+          <div className="scan-scope-title">URL Scan kiểm tra được những nhóm OWASP nào?</div>
+          <p className="scan-scope-copy">
+            URL Scan quan sát website đang chạy, crawl/probe endpoint và fuzz input. Mode này phù hợp với lỗi nhìn thấy qua HTTP request/response, không thay thế Project Scan cho source/dependency.
+          </p>
+        </div>
+        <div className="owasp-chip-grid">
+          {URL_SCAN_COVERAGE.map((item) => (
+            <span key={item.id} className="owasp-scope-chip" title={item.summary}>
+              <strong>{item.id}</strong> {item.name}
+            </span>
+          ))}
+        </div>
+      </div>
+
       <div className="section">
         <div className="section-label">Địa chỉ website</div>
 

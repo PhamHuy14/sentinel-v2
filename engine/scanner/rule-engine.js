@@ -8,7 +8,7 @@ const { runAllA02Rules } = require('../rules/a02');
 
 // ── A03 ──────────────────────────────────────────────────────────────────────
 const { runAllA03Rules } = require('../rules/a03');
-const { runSensitiveDataInLogs, runStructuredLogging } = require('../rules/source-enhanced/supply-chain-enhanced');
+const { runStructuredLogging } = require('../rules/source-enhanced/supply-chain-enhanced');
 
 // ── A04 ──────────────────────────────────────────────────────────────────────
 const { runA04Rules } = require('../rules/a04');
@@ -26,12 +26,10 @@ const { runAllA07Rules } = require('../rules/a07');
 const { runAllA08Rules } = require('../rules/a08');
 
 // ── A09 ──────────────────────────────────────────────────────────────────────
-const { runAuthEventLogging } = require('../rules/a09/auth-event-logging');
-const { runAlertingCheck } = require('../rules/a09/alerting-check');
+const { runAllA09Rules } = require('../rules/a09');
 
 // ── A10 ──────────────────────────────────────────────────────────────────────
-const { runExceptionLeakage } = require('../rules/a10/exception-leakage');
-const { runMalformedInput } = require('../rules/a10/malformed-input');
+const { runAllA10Rules } = require('../rules/a10');
 
 // ── Generic ──────────────────────────────────────────────────────────────────
 const { runGenericProjectChecks } = require('../rules/generic/generic-project-checks');
@@ -56,8 +54,7 @@ function runUrlRules(context) {
     ...runAllA06Rules(context),
     ...runAllA07Rules(context),
     ...runAllA08Rules(context),
-    ...runMalformedInput(context),
-    ...runExceptionLeakage(context),
+    ...runAllA10Rules(context),
   ];
   return deduplicateFindings(findings);
 }
@@ -69,9 +66,8 @@ function runProjectRules(context) {
     ...runAllA05Rules(context),
     ...runAllA06Rules(context),
     ...runAllA08Rules(context),
-    ...runAuthEventLogging(context),
-    ...runAlertingCheck(context),
-    ...runSensitiveDataInLogs(context),
+    ...runAllA09Rules(context),
+    ...runAllA10Rules(context),
     ...runStructuredLogging(context),
     ...runGenericProjectChecks(context),
   ];

@@ -1,5 +1,6 @@
 import React from 'react';
 import { useStore } from '../store/useStore';
+import { PROJECT_SCAN_COVERAGE } from '../utils/owasp';
 
 const SCOPE_CARDS = [
   {
@@ -46,6 +47,22 @@ export const ProjectScanForm: React.FC = () => {
       </div>
 
       {/* ── Chọn thư mục ── */}
+      <div className="scan-scope-notice">
+        <div>
+          <div className="scan-scope-title">Project Scan kiểm tra được những nhóm OWASP nào?</div>
+          <p className="scan-scope-copy">
+            Project Scan đọc source/config/dependency/CI để bắt các lỗi không thể nhìn đầy đủ từ URL Scan, ví dụ weak crypto trong code, dependency cũ, SRI hoặc pipeline integrity.
+          </p>
+        </div>
+        <div className="owasp-chip-grid">
+          {PROJECT_SCAN_COVERAGE.map((item) => (
+            <span key={item.id} className="owasp-scope-chip" title={item.summary}>
+              <strong>{item.id}</strong> {item.name}
+            </span>
+          ))}
+        </div>
+      </div>
+
       <div className="section">
         <div className="section-label">Thư mục mã nguồn</div>
 

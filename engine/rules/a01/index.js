@@ -5,6 +5,10 @@
  * Cách dùng:
  * Require file này và gọi runAllA01Rules(context) để chạy toàn bộ,
  * hoặc require từng module riêng lẻ.
+ *
+ * FIX: runSecurityHeadersHeuristic đã được bổ sung vào ALL_A01_RULES.
+ * Trước đây function này được import và export nhưng KHÔNG được thêm vào
+ * mảng ALL_A01_RULES → không bao giờ chạy khi gọi runAllA01Rules().
  */
 
 'use strict';
@@ -42,6 +46,10 @@ const ALL_A01_RULES = [
 
   // Nhóm HTTP method liên quan kiểm soát truy cập.
   { fn: runHttpVerbTampering,            name: 'HttpVerbTampering',     owasp: 'OTG-CONFIG-006' },
+
+  // FIX BUG 1: Security headers — đã được import + export nhưng bị bỏ sót khỏi mảng này.
+  // Kiểm tra Cache-Control, HSTS, X-Frame-Options, X-Content-Type-Options, CORS headers.
+  { fn: runSecurityHeadersHeuristic,     name: 'SecurityHeaders',       owasp: 'OTG-CONFIG-007' },
 ];
 
 /**

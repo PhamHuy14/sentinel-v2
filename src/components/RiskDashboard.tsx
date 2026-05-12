@@ -1,5 +1,6 @@
 import React from 'react';
 import { Finding, ScanResult } from '../types';
+import { formatOwaspCategory } from '../utils/owasp';
 
 interface Props { scanResult: ScanResult }
 
@@ -64,7 +65,7 @@ export const RiskDashboard: React.FC<Props> = ({ scanResult }) => {
               .sort((a, b) => b[1] - a[1])
               .map(([cat, count]) => (
                 <div key={cat} className="rg-bar-row">
-                  <span className="rg-bar-cat">{cat}</span>
+                  <span className="rg-bar-cat" title={formatOwaspCategory(cat)}>{formatOwaspCategory(cat)}</span>
                   <div className="rg-bar-track">
                     <div className="rg-bar-fill" style={{ width: `${(count / maxCat) * 100}%`, background: risk.color }} />
                   </div>

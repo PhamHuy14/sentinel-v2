@@ -131,6 +131,7 @@ export const ChecklistItem: React.FC<ChecklistItemProps> = ({ id, label, hideCom
             onChange={() => toggleChecklistItem(id)}
             className="chk-checkbox-input"
           />
+          <span className="chk-item-icon" aria-hidden="true" />
           <span className={`chk-item-text ${checked ? 'chk-item-text-done' : ''}`}>
             {label}
           </span>
@@ -141,7 +142,7 @@ export const ChecklistItem: React.FC<ChecklistItemProps> = ({ id, label, hideCom
             onClick={() => setExpanded(v => !v)}
             title={expanded ? 'Thu gọn' : 'Xem todo & khuyến nghị'}
           >
-            {expanded ? '▲' : '▼'}
+            {'>'}
           </button>
         )}
       </div>
