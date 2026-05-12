@@ -16,7 +16,6 @@ function runSessionFixation(context) {
   const setCookies = context.setCookies || [];
   const authHints = context.authHints || {};
   const url = context.finalUrl || '';
-  const text = context.text || '';
   const findings = [];
 
   // ── 1. Session cookie thiếu Secure trong auth context (giữ + mở rộng) ────
@@ -25,7 +24,6 @@ function runSessionFixation(context) {
   for (const cookie of sessionCookies) {
     const cookieName = cookie.split('=')[0].trim();
     const hasSecure = /\bsecure\b/i.test(cookie);
-    const hasHttpOnly = /\bhttponly\b/i.test(cookie);
     const sameSiteMatch = cookie.match(/samesite=(\w+)/i);
     const sameSite = sameSiteMatch ? sameSiteMatch[1].toLowerCase() : null;
 
@@ -80,8 +78,8 @@ function runSessionFixation(context) {
     { re: /[?;&](?:JSESSIONID|jsessionid)=[A-F0-9]{20,}/i,  label: 'Java JSESSIONID trong URL' },
     { re: /[?;&](?:PHPSESSID|phpsessid)=[a-z0-9]{20,}/i,    label: 'PHP PHPSESSID trong URL' },
     { re: /;jsessionid=[A-F0-9]{20,}/i,                       label: 'JSESSIONID trong URL path (path parameter)' },
-    { re: /[?;&](?:session_id|sessionid|sess_id)=[A-Za-z0-9_\-]{16,}/i, label: 'session_id trong URL query' },
-    { re: /[?;&](?:ASP\.NET_SessionId)=[A-Za-z0-9_\-]{16,}/i, label: 'ASP.NET SessionId trong URL' },
+    { re: /[?;&](?:session_id|sessionid|sess_id)=[A-Za-z0-9_-]{16,}/i, label: 'session_id trong URL query' },
+    { re: /[?;&](?:ASP\.NET_SessionId)=[A-Za-z0-9_-]{16,}/i, label: 'ASP.NET SessionId trong URL' },
   ];
 
   const urlSessionMatch = sessionInUrl.find(({ re }) => re.test(url));
@@ -115,7 +113,6 @@ function runSessionFixation(context) {
   // Heuristic: nếu trang có login form VÀ session cookie ĐÃ được set (pre-login)
   // thì cần kiểm tra xem có rotate sau login không
   if (authHints.hasLoginHint && sessionCookies.length > 0) {
-    const preLoginSessionHint = /\b(remember me|keep me signed in|stay logged in)\b/i.test(text);
     // Nếu set session cookie trên login page (trước khi user đăng nhập) — cần rotate
     findings.push(normalizeFinding({
       ruleId: 'A07-SESSFIXATION-002',

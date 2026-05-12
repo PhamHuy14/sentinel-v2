@@ -4,7 +4,7 @@
 
 const path = require('path');
 
-const { ensureHttpUrl } = require('../utils/url');
+const { validatePublicHttpUrl } = require('../utils/url');
 const { toHeaderObject, buildRequestHeaders, summarizeAuth } = require('../utils/http');
 const { responseFingerprint } = require('../utils/diff');
 
@@ -269,6 +269,41 @@ function runActuatorExposure(surfaceStatus, origin) {
   return findings;
 }
 
+function detectProjectTechStack(context) {
+  const detected = new Set();
+  const packageJson = context.packageJson || '';
+  const files = context.files || [];
+  const joinedNames = files.map(f => String(f).toLowerCase()).join('\n');
+
+  if (packageJson) {
+    detected.add('Node.js');
+    try {
+      const pkg = JSON.parse(packageJson);
+      const deps = {
+        ...(pkg.dependencies || {}),
+        ...(pkg.devDependencies || {}),
+      };
+      if (deps.react) detected.add('React');
+      if (deps.next) detected.add('Next.js');
+      if (deps.vue) detected.add('Vue.js');
+      if (deps['@angular/core']) detected.add('Angular');
+      if (deps.express) detected.add('Express.js');
+      if (deps.electron) detected.add('Electron');
+      if (deps.vite) detected.add('Vite');
+    } catch {
+      // Keep Node.js detection even when package.json is not parseable.
+    }
+  }
+
+  if ((context.csprojFiles || []).length > 0 || /\.csproj\b|\.sln\b/.test(joinedNames)) detected.add('.NET');
+  if (/pom\.xml|build\.gradle|gradlew|\.java\b/.test(joinedNames)) detected.add('Java');
+  if (/spring|spring-boot/i.test((context.csprojFiles || []).map(f => f.content).join('\n') + joinedNames)) detected.add('Spring Boot');
+  if (/composer\.json|artisan|\.php\b/.test(joinedNames)) detected.add('PHP');
+  if (/composer\.json/.test(joinedNames) && /laravel/i.test(joinedNames + '\n' + (context.configFiles || []).map(f => f.content).join('\n'))) detected.add('Laravel');
+
+  return Array.from(detected);
+}
+
 // ── URL SCAN ─────────────────────────────────────────────────────────────────
 async function runUrlScan(inputUrl, options = {}) {
   const onProgress  = options.onProgress  || (() => {});
@@ -277,7 +312,8 @@ async function runUrlScan(inputUrl, options = {}) {
 
   onProgress({ stage: 'crawl', msg: `Khởi tạo: ${inputUrl}`, level: 'info', ts: Date.now() });
 
-  const parsed      = ensureHttpUrl(inputUrl);
+  const allowPrivateTargets = process.env.SENTINEL_ALLOW_PRIVATE_TARGETS === 'true';
+  const parsed      = await validatePublicHttpUrl(inputUrl, { allowPrivate: allowPrivateTargets });
   const auth        = options.auth  || {};
   const maxDepth    = options.maxDepth  ?? 1;
   const maxBudget   = options.maxBudget ?? 30;
@@ -292,6 +328,7 @@ async function runUrlScan(inputUrl, options = {}) {
     concurrency:        options.concurrency || 12,
     requestDelayMs:     isLocalhost ? 0 : 60,
     rejectUnauthorized: !isLocalhost,
+    validateUrl:        (url) => validatePublicHttpUrl(url, { allowPrivate: allowPrivateTargets }),
   });
 
   // ── STAGE 1: PARALLEL BFS CRAWL ──────────────────────────────
@@ -301,7 +338,7 @@ async function runUrlScan(inputUrl, options = {}) {
   const allForms     = [];
   const allLinks     = new Set();
 
-  onProgress({ stage: 'crawl', msg: `Crawling ${parsed.origin} (depth: ${maxDepth}, budget: ${maxBudget})…`, level: 'info', ts: Date.now() });
+  onProgress({ stage: 'crawl', msg: `Đang crawl ${parsed.origin} (depth: ${maxDepth}, budget: ${maxBudget})…`, level: 'info', ts: Date.now() });
 
   while (urlQueue.length > 0 && currentDepth <= maxDepth && crawledUrls.size < MAX_CRAWL_URLS) {
     if (abortSignal?.aborted) break;
@@ -336,7 +373,7 @@ async function runUrlScan(inputUrl, options = {}) {
 
   onProgress({
     stage: 'crawl',
-    msg: `Crawl xong: ${crawledUrls.size} trang · ${allForms.length} forms · ${allLinks.size} links`,
+    msg: `Crawl xong: ${crawledUrls.size} trang · ${allForms.length} form · ${allLinks.size} link`,
     level: 'success', ts: Date.now(),
   });
 
@@ -356,7 +393,7 @@ async function runUrlScan(inputUrl, options = {}) {
   const authHints = detectAuthHints(text, toHeaderObject(headers));
 
   // ── STAGE 1b: PARALLEL PROBE + FINGERPRINT ────────────────────
-  onProgress({ stage: 'probe', msg: `Probing ${PROBE_ROUTES.length} routes + fingerprinting…`, level: 'info', ts: Date.now() });
+  onProgress({ stage: 'probe', msg: `Đang probe ${PROBE_ROUTES.length} route + fingerprinting…`, level: 'info', ts: Date.now() });
 
   const [optionsProbe, missingPathProbeRaw, surfaceStatus] = await Promise.all([
     // BUG FIX: truyền `client` vào probeOptions và probeMissingPath
@@ -370,7 +407,7 @@ async function runUrlScan(inputUrl, options = {}) {
   const accessibleCount = Object.values(surfaceStatus).filter(v => v.status === 200).length;
   onProgress({
     stage: 'probe',
-    msg: `Probe xong: ${accessibleCount}/${PROBE_ROUTES.length} routes accessible`,
+    msg: `Probe xong: ${accessibleCount}/${PROBE_ROUTES.length} route truy cập được`,
     level: accessibleCount > 5 ? 'warn' : 'success', ts: Date.now(),
   });
 
@@ -405,7 +442,7 @@ async function runUrlScan(inputUrl, options = {}) {
   if (techStack.length > 0) {
     onProgress({ stage: 'probe', msg: `Tech stack: ${techStack.join(', ')}`, level: 'info', ts: Date.now() });
   }
-  onProgress({ stage: 'probe', msg: `Attack surface score: ${attackSurface.score}/100`, level: attackSurface.score > 40 ? 'warn' : 'info', ts: Date.now() });
+  onProgress({ stage: 'probe', msg: `Điểm attack surface: ${attackSurface.score}/100`, level: attackSurface.score > 40 ? 'warn' : 'info', ts: Date.now() });
 
   const context = {
     scannedUrl: parsed.toString(), finalUrl, origin: parsed.origin,
@@ -503,7 +540,7 @@ async function runProjectScan(folderPath, options = {}) {
 
   if (!folderPath || typeof folderPath !== 'string') throw new Error('Hãy chọn thư mục project.');
 
-  onProgress({ stage: 'analyze', msg: `Scanning project: ${folderPath}`, level: 'info', ts: Date.now() });
+   onProgress({ stage: 'analyze', msg: `Đang quét project: ${folderPath}`, level: 'info', ts: Date.now() });
 
   if (abortSignal?.aborted) {
     return { ok: false, error: 'Scan đã bị hủy.', findings: [], metadata: { summary: { total: 0, byCategory: {}, bySeverity: {} } } };
@@ -566,13 +603,15 @@ async function runProjectScan(folderPath, options = {}) {
     configFiles, textFiles, codeFiles, ciFiles,
   };
 
+  const techStack = detectProjectTechStack(context);
+
   const findings = runProjectRules(context);
   const summary  = summarizeFindings(findings);
   const elapsed  = ((Date.now() - startTs) / 1000).toFixed(1);
 
   onProgress({
     stage: 'done',
-    msg: `✓ Project scan xong — ${findings.length} findings trong ${elapsed}s`,
+    msg: `✓ Quét mã nguồn hoàn tất — ${findings.length} findings trong ${elapsed}s`,
     level: 'success', ts: Date.now(),
   });
 
@@ -583,6 +622,7 @@ async function runProjectScan(folderPath, options = {}) {
       packageJsonFound: !!dependencyArtifacts.packageJsonPath,
       csprojCount:      dependencyArtifacts.csprojFiles.length,
       configCount:      configFiles.length,
+      techStack,
       summary,
     },
   };

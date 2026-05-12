@@ -3,7 +3,7 @@
  *
  * Gói miễn phí: https://console.groq.com
  * Mô hình: llama-3.3-70b-versatile (nhanh, mạnh, miễn phí)
- * Biến môi trường: VITE_GROQ_API_KEY
+ * Bien moi truong: GROQ_API_KEY (doc trong Electron main process)
  *
  * FIX v2.1:
  *  - Đổi DEFAULT_MODEL từ llama3-8b-8192 (deprecated) → llama-3.3-70b-versatile
@@ -32,6 +32,7 @@ const FALLBACK_MODELS = [
 const DEFAULT_TIMEOUT = 15_000;
 
 type AiFetch = (payload: {
+  providerId: 'groq';
   url: string;
   method?: string;
   headers?: Record<string, string>;
@@ -63,7 +64,7 @@ async function fetchJson(
 ) {
   const aiFetch = getAiFetch();
   if (aiFetch) {
-    const resp = await aiFetch({ url, method: 'POST', headers: payload.headers, body: payload.body, timeoutMs });
+    const resp = await aiFetch({ providerId: 'groq', url, method: 'POST', headers: payload.headers, body: payload.body, timeoutMs });
     return { ok: resp.ok, status: resp.status, body: resp.body || '', contentType: extractContentType(resp.headers) };
   }
 
@@ -159,10 +160,9 @@ async function streamOpenAiCompletion(
 
 /** Đọc danh sách model từ env var VITE_GROQ_MODELS (comma-separated) hoặc dùng fallback mặc định */
 function resolveModelList(): string[] {
-  const env = (import.meta as unknown as Record<string, Record<string, string>>).env ?? {};
-  const fromEnv = env.VITE_GROQ_MODELS ?? '';
+  const fromEnv = import.meta.env.VITE_GROQ_MODELS ?? '';
   if (fromEnv.trim()) {
-    return fromEnv.split(',').map(m => m.trim()).filter(Boolean);
+    return fromEnv.split(',').map((m: string) => m.trim()).filter(Boolean);
   }
   return FALLBACK_MODELS;
 }
@@ -172,20 +172,15 @@ export class GroqProvider implements LLMProvider {
   readonly label = 'Groq (Llama-3.3 70B)';
   readonly supportsJsonMode = true;
 
-  private readonly apiKey: string;
   private readonly metrics: ProviderMetricsTracker;
   private readonly modelList: string[];
 
   constructor(metrics: ProviderMetricsTracker) {
-    const env = (import.meta as unknown as Record<string, Record<string, string>>).env ?? {};
-    this.apiKey = env.VITE_GROQ_API_KEY ?? '';
     this.metrics = metrics;
     this.modelList = resolveModelList();
   }
 
   async generate(prompt: string, options: GenerateOptions = {}): Promise<string> {
-    if (!this.apiKey) throw new ProviderError('auth_error', this.id, 'VITE_GROQ_API_KEY not set');
-
     const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT;
     const start = Date.now();
 
@@ -207,9 +202,8 @@ export class GroqProvider implements LLMProvider {
       try {
         const headers = {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.apiKey}`,
         };
-        const canStream = Boolean(options.onToken) && options.stream !== false && !getAiFetch();
+        const canStream = false;
         const res = canStream
           ? await streamOpenAiCompletion(GROQ_API_URL, headers, body, timeoutMs, options.onToken!, options.signal)
           : await fetchJson(GROQ_API_URL, { headers, body: JSON.stringify(body) }, timeoutMs, options.signal);
@@ -218,6 +212,10 @@ export class GroqProvider implements LLMProvider {
         if (res.status === 429) {
           this.metrics.recordFailure(this.id, latency);
           throw new ProviderError('rate_limit', this.id, 'Rate limit exceeded', 429);
+        }
+        if (res.status === 401 || res.status === 403) {
+          this.metrics.recordFailure(this.id, latency);
+          throw new ProviderError('auth_error', this.id, 'GROQ_API_KEY not set or rejected', res.status);
         }
 
         // FIX: 400 hoặc 404 thường do model deprecated/không tồn tại → thử model tiếp theo
@@ -279,11 +277,13 @@ export class GroqProvider implements LLMProvider {
   }
 
   async health(): Promise<ProviderHealth> {
-    return this.metrics.getHealth(this.id, !this.apiKey);
+    return this.metrics.getHealth(this.id, false);
   }
 
   async estimateCostOrQuota(): Promise<number> {
     // Groq free tier: ~14.400 request/ngày cho llama-3.3-70b-versatile
-    return this.apiKey ? 14_400 : 0;
+    return 14_400;
   }
 }
+
+

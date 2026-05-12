@@ -17,7 +17,7 @@ const SECURITY_EVENTS = [
   {
     id: 'login',
     codePattern: /login|signin|PasswordSignIn|SignInManager|authenticate/i,
-    logPattern: /log.*(?:login|signin|auth(?:entic)?)|(?:login|signin|auth).*log/i,
+    logPattern: /\b(?:logger|log|audit)\b.*(?:login|signin|auth(?:entic)?)|(?:login|signin|auth).*\b(?:logger|log|audit)\b/i,
     label: 'Login/Authentication flow',
     remediation: 'Log cả login thành công và thất bại với: timestamp, username (không log password), IP, user-agent, kết quả.',
   },

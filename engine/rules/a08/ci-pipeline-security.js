@@ -137,7 +137,7 @@ function runCiPipelineSecurity(context) {
     const lines = file.content.split('\n');
     const secretLines = lines.filter(line => {
       // Dòng có pattern: KEY: value (không phải ${{ secrets.X }} hoặc $VAR)
-      return /(?:password|passwd|secret|api_key|apikey|token|credential|private_key)\s*:\s*['"a-zA-Z0-9+/=_\-]{8,}/i.test(line)
+      return /(?:password|passwd|secret|api_key|apikey|token|credential|private_key)\s*:\s*['"a-zA-Z0-9+/=_-]{8,}/i.test(line)
         && !/\$\{\{|\$[A-Z_]+\b|secrets\./i.test(line);
     });
     if (secretLines.length > 0) {

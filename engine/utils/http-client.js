@@ -10,6 +10,7 @@ class ScannerHttpClient {
     this.concurrencyLimit = options.concurrency      ?? 12;
     this.rejectUnauthorized = options.rejectUnauthorized !== false;
     this.requestDelayMs   = options.requestDelayMs   || 0;
+    this.validateUrl      = options.validateUrl      || null;
 
     // Shared connection pool — reuse TCP connections across requests (big speed win)
     this.dispatcher = new Agent({
@@ -74,13 +75,29 @@ class ScannerHttpClient {
       }
 
       try {
+        let currentUrl = url;
+        const shouldFollow = options.redirect !== 'manual';
+        const maxRedirects = options.maxRedirects ?? 5;
+        if (this.validateUrl) await this.validateUrl(currentUrl);
         const startTime = performance.now();
-        const response  = await fetch(url, {
-          ...options,
-          dispatcher: this.dispatcher,
-          signal:     controller.signal,
-          redirect:   options.redirect || 'follow',
-        });
+        let response;
+        for (let redirects = 0; redirects <= maxRedirects; redirects++) {
+          response = await fetch(currentUrl, {
+            ...options,
+            dispatcher: this.dispatcher,
+            signal:     controller.signal,
+            redirect:   'manual',
+          });
+
+          const location = response.headers.get('location');
+          const isRedirect = response.status >= 300 && response.status < 400 && location;
+          if (!shouldFollow || !isRedirect) break;
+          if (redirects === maxRedirects) throw new Error(`Too many redirects: ${url}`);
+
+          const nextUrl = new URL(location, currentUrl).toString();
+          if (this.validateUrl) await this.validateUrl(nextUrl);
+          currentUrl = nextUrl;
+        }
         clearTimeout(timeoutId);
 
         // Read body with size cap
@@ -98,7 +115,7 @@ class ScannerHttpClient {
         }
 
         const timeMs = Math.round(performance.now() - startTime);
-        const result = { response, text, finalUrl: response.url, timeMs };
+        const result = { response, text, finalUrl: response.url || currentUrl, timeMs };
 
         if (cacheKey) this._cache.set(cacheKey, result);
         return result;

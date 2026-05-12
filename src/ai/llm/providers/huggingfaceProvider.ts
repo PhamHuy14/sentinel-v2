@@ -3,7 +3,7 @@
  *
  * Gói miễn phí: https://huggingface.co/inference-api
  * Mô hình: meta-llama/Llama-3.1-8B-Instruct (Messages API, miễn phí)
- * Biến môi trường: VITE_HF_API_KEY
+ * Bien moi truong: HF_API_KEY (doc trong Electron main process)
  *
  * FIX v2.1:
  *  - Chuyển từ Legacy Text-Generation API → Messages API (OpenAI-compatible)
@@ -33,6 +33,7 @@ const FALLBACK_MODELS = [
 ];
 
 type AiFetch = (payload: {
+  providerId: 'huggingface';
   url: string;
   method?: string;
   headers?: Record<string, string>;
@@ -59,7 +60,7 @@ function shouldParseJson(body: string, contentType: string): boolean {
 async function fetchJson(url: string, payload: { headers: Record<string, string>; body: string }, timeoutMs: number) {
   const aiFetch = getAiFetch();
   if (aiFetch) {
-    const resp = await aiFetch({ url, method: 'POST', headers: payload.headers, body: payload.body, timeoutMs });
+    const resp = await aiFetch({ providerId: 'huggingface', url, method: 'POST', headers: payload.headers, body: payload.body, timeoutMs });
     return { ok: resp.ok, status: resp.status, body: resp.body || '', contentType: extractContentType(resp.headers) };
   }
 
@@ -81,10 +82,9 @@ async function fetchJson(url: string, payload: { headers: Record<string, string>
 
 /** Đọc danh sách model từ VITE_HF_MODELS hoặc dùng fallback mặc định */
 function resolveModelList(): string[] {
-  const env = (import.meta as unknown as Record<string, Record<string, string>>).env ?? {};
-  const fromEnv = env.VITE_HF_MODELS ?? env.VITE_HF_MODEL ?? '';
+  const fromEnv = import.meta.env.VITE_HF_MODELS ?? import.meta.env.VITE_HF_MODEL ?? '';
   if (fromEnv.trim()) {
-    return fromEnv.split(',').map(m => m.trim()).filter(Boolean);
+    return fromEnv.split(',').map((m: string) => m.trim()).filter(Boolean);
   }
   return FALLBACK_MODELS;
 }
@@ -94,20 +94,15 @@ export class HuggingFaceProvider implements LLMProvider {
   readonly label = 'HuggingFace (Llama-3.1 8B)';
   readonly supportsJsonMode = false;
 
-  private readonly apiKey: string;
   private readonly metrics: ProviderMetricsTracker;
   private readonly modelList: string[];
 
   constructor(metrics: ProviderMetricsTracker) {
-    const env = (import.meta as unknown as Record<string, Record<string, string>>).env ?? {};
-    this.apiKey = env.VITE_HF_API_KEY ?? '';
     this.metrics = metrics;
     this.modelList = resolveModelList();
   }
 
   async generate(prompt: string, options: GenerateOptions = {}): Promise<string> {
-    if (!this.apiKey) throw new ProviderError('auth_error', this.id, 'VITE_HF_API_KEY not set');
-
     const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT;
     const start = Date.now();
     const systemPrompt = options.systemPrompt ?? 'You are a helpful security assistant.';
@@ -133,7 +128,6 @@ export class HuggingFaceProvider implements LLMProvider {
       try {
         const headers = {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.apiKey}`,
         };
 
         const res = await fetchJson(url, { headers, body: JSON.stringify(body) }, timeoutMs);
@@ -148,6 +142,10 @@ export class HuggingFaceProvider implements LLMProvider {
         if (res.status === 429 || res.status === 503) {
           this.metrics.recordFailure(this.id, latency);
           throw new ProviderError('rate_limit', this.id, `HF throttle HTTP ${res.status}`, res.status);
+        }
+        if (res.status === 401 || res.status === 403) {
+          this.metrics.recordFailure(this.id, latency);
+          throw new ProviderError('auth_error', this.id, 'HF_API_KEY not set or rejected', res.status);
         }
 
         if (!res.ok) {
@@ -193,11 +191,14 @@ export class HuggingFaceProvider implements LLMProvider {
   }
 
   async health(): Promise<ProviderHealth> {
-    return this.metrics.getHealth(this.id, !this.apiKey);
+    return this.metrics.getHealth(this.id, false);
   }
 
   async estimateCostOrQuota(): Promise<number> {
     // HF serverless free tier: ~1.000 request/ngày
-    return this.apiKey ? 1_000 : 0;
+    return 1_000;
   }
 }
+
+
+

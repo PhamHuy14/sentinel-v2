@@ -1,17 +1,17 @@
 /**
- * Hybrid AI Orchestrator (Dieu phoi AI lai)
+ * Hybrid AI Orchestrator (Điều phối AI lai)
  *
- * Trien khai kien truc 3 lop (3-layer architecture):
- *   Lop 1 -> Knowledge Base (FAQ ngoai tuyen, phan hoi ngay lap tuc, uu tien cao nhat)
- *   Lop 2 -> LLM Da nha cung cap (API ben ngoai, dung du phong)
- *   Lop 3 -> Trinh kiem tra cheo / tong hop (trinh xac minh duoc tich hop vao LLMRouter)
+ * Triển khai kiến trúc 3 lớp (3-layer architecture):
+ *   Lớp 1 -> Knowledge Base (FAQ ngoại tuyến, phản hồi ngay lập tức, ưu tiên cao nhất)
+ *   Lớp 2 -> LLM đa nhà cung cấp (API bên ngoài, dùng dự phòng)
+ *   Lớp 3 -> Trình kiểm tra chéo / tổng hợp (trình xác minh được tích hợp vào LLMRouter)
  *
- * NANG CAP v2:
- *  - KB_MIN_LENGTH tang tu 80 -> 200: KB can cau tra loi du dai moi khong can LLM
- *  - Them logic HYBRID: ket hop KB + LLM khi KB tra loi duoc nhung cau hoi phuc tap
- *  - Phat hien cau hoi "can giai thich sau" de luon goi LLM
- *  - OOS_MARKERS mo rong de bat chinh xac hon
- *  - Fallback graceful: khong hien thi loi tho voi user
+ * NÂNG CẤP v2:
+ *  - KB_MIN_LENGTH tăng từ 80 -> 200: KB cần câu trả lời đủ dài mới không cần LLM
+ *  - Thêm logic HYBRID: kết hợp KB + LLM khi KB trả lời được những câu hỏi phức tạp
+ *  - Phát hiện câu hỏi "cần giải thích sâu" để luôn gọi LLM
+ *  - OOS_MARKERS mở rộng để bắt chính xác hơn
+ *  - Fallback graceful: không hiển thị lỗi thô với user
  */
 
 import { AiQueryPayload, routeQuery } from '../aiRouter.js';
@@ -21,38 +21,38 @@ import { AiResponse } from './types';
 // ── Nguong cai tien ─────────────────────────────────────────────────────────────────
 
 /**
- * NANG CAP: Tang tu 80 -> 200.
- * KB can co cau tra loi du chat luong (it nhat 200 ky tu) moi duoc xem la "tot".
- * Dieu nay khien cac cau hoi phuc tap duoc escalate sang LLM thuong xuyen hon.
+ * NÂNG CẤP: Tăng từ 80 -> 200.
+ * KB cần có câu trả lời đủ chất lượng (ít nhất 200 ký tự) mới được xem là "tốt".
+ * Điều này khiến các câu hỏi phức tạp được escalate sang LLM thường xuyên hơn.
  */
 const KB_MIN_LENGTH = 200;
 
 /**
- * Do dai KB toi thieu cho cau hoi don gian (chao hoi, liet ke topic, v.v.)
- * Cac cau tra loi nay khong can LLM.
+ * Độ dài KB tối thiểu cho câu hỏi đơn giản (chào hỏi, liệt kê topic, v.v.)
+ * Các câu trả lời này không cần LLM.
  */
 const KB_SHORT_ANSWER_MIN = 50;
 
-/** Marker nhan biet cau tra loi nam ngoai pham vi KB hoac la fallback */
+/** Marker nhận biết câu trả lời nằm ngoài phạm vi KB hoặc là fallback */
 const OOS_MARKERS = [
-  'Ngoai pham vi ho tro',
-  'Chua co trong knowledge base',
-  'Toi la AI assistant **chuyen ve bao mat web**',
+  'Ngoài phạm vi hỗ trợ',
+  'Chưa có trong knowledge base',
+  'Tôi là AI assistant **chuyên về bảo mật web**',
   '⚠️ **AI service temporarily unavailable.**',
-  'Cau hoi nay nam ngoai',
-  'khong thuoc pham vi',
+  'Câu hỏi này nằm ngoài',
+  'không thuộc phạm vi',
 ];
 
-/** Marker nhan biet day la cau tra loi don gian tu KB (khong can LLM bo sung) */
+/** Marker nhận biết đây là câu trả lời đơn giản từ KB (không cần LLM bổ sung) */
 const SIMPLE_KB_MARKERS = [
-  '## Toi ho tro nhung chu de nao',
-  '## Toi la SENTINEL AI Assistant',
-  'Xin chao!',
-  'Cam on ban',
-  'Rat vui',
+  '## Tôi hỗ trợ những chủ đề nào',
+  '## Tôi là SENTINEL AI Assistant',
+  'Xin chào!',
+  'Cảm ơn bạn',
+  'Rất vui',
 ];
 
-/** Tu khoa goi y cau hoi can giai thich sau -> luon dung LLM */
+/** Từ khóa gợi ý câu hỏi cần giải thích sâu -> luôn dùng LLM */
 const DEEP_EXPLAIN_MARKERS = [
   'tai sao', 'why', 'co che', 'mechanism', 'hoat dong nhu the nao',
   'how does', 'chi tiet', 'phan tich sau', 'so sanh', 'compare',
@@ -172,12 +172,12 @@ export class HybridOrchestrator {
       };
     }
 
-    // ── Lop 2: LLM lam nguon chinh ──────────────────────────────────────────────
+    // ── Lớp 2: LLM làm nguồn chính ──────────────────────────────────────────────
     if (!this.llmRouter) {
-      // Khong co LLM -> dung KB bat ke chat luong
+      // Không có LLM -> dùng KB bất kể chất lượng
       return {
         answer:         isOOSResponse(kbAnswer) || kbAnswer.length < 20
-          ? 'Cau hoi nay chua co trong knowledge base. Vui long thu cau hinh API key (Gemini/Groq/OpenRouter) de nhan cau tra loi tu AI.'
+          ? 'Câu hỏi này chưa có trong knowledge base. Vui lòng thử cấu hình API key (Gemini/Groq/OpenRouter) để nhận câu trả lời từ AI.'
           : kbAnswer,
         confidence:     0.35,
         providersTried: ['knowledge_base'],
@@ -192,7 +192,7 @@ export class HybridOrchestrator {
     try {
       const llmResponse = await this.llmRouter.query(payload);
 
-      // Neu LLM tra ve cau tra loi te nhung KB co noi dung huu ich -> ket hop
+      // Nếu LLM trả về câu trả lời tệ nhưng KB có nội dung hữu ích -> kết hợp
       if (
         llmResponse.confidence < 0.30 &&
         kbAnswer.length > 60 &&
@@ -201,7 +201,7 @@ export class HybridOrchestrator {
         warnings.push('LLM confidence low; supplementing with knowledge base');
         return {
           ...llmResponse,
-          answer:   `${kbAnswer}\n\n---\n*Them tu AI (confidence thap):*\n\n${llmResponse.answer}`,
+          answer:   `${kbAnswer}\n\n---\n*Thêm từ AI (confidence thấp):*\n\n${llmResponse.answer}`,
           warnings: [...llmResponse.warnings, ...warnings],
           latencyMs: Date.now() - start,
           source:   'synthesized',
@@ -216,9 +216,9 @@ export class HybridOrchestrator {
     } catch (err) {
       warnings.push(`LLM tier error: ${(err as Error).message}`);
 
-      // Graceful fallback ve KB
+      // Graceful fallback về KB
       const fallbackAnswer = isOOSResponse(kbAnswer) || kbAnswer.length < 20
-        ? '⚠️ Dich vu AI tam thoi khong kha dung va cau hoi nay chua co trong knowledge base. Vui long thu lai sau hoac hoi cau khac.'
+        ? '⚠️ Dịch vụ AI tạm thời không khả dụng và câu hỏi này chưa có trong knowledge base. Vui lòng thử lại sau hoặc hỏi câu khác.'
         : kbAnswer;
 
       return {

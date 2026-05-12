@@ -53,7 +53,7 @@ ipcMain.handle('scan:url', async (event, payload) => {
     if (ac.signal.aborted) {
       return { ok: false, error: 'Scan đã bị hủy.', findings: [], metadata: { summary: { total: 0, byCategory: {}, bySeverity: {} } } };
     }
-    return { ok: false, error: error?.message || 'URL scan failed', findings: [], metadata: { summary: { total: 0, byCategory: {}, bySeverity: {} } } };
+    return { ok: false, error: error?.message || 'Quét URL thất bại', findings: [], metadata: { summary: { total: 0, byCategory: {}, bySeverity: {} } } };
   } finally {
     if (currentScanAbort === ac) currentScanAbort = null;
   }
@@ -72,15 +72,18 @@ ipcMain.handle('scan:project', async (event, payload) => {
   currentScanAbort = ac;
 
   try {
+    const folderPath = payload?.folderPath || '';
+    const stat = await fs.stat(folderPath).catch(() => null);
+    if (!stat?.isDirectory()) throw new Error('Thư mục quét không hợp lệ.');
     const onProgress = (msg) => {
       try { event.sender.send('scan:progress', msg); } catch {}
     };
-    return await runProjectScan(payload?.folderPath || '', { onProgress, abortSignal: ac.signal });
+    return await runProjectScan(folderPath, { onProgress, abortSignal: ac.signal });
   } catch (error) {
     if (ac.signal.aborted) {
       return { ok: false, error: 'Scan đã bị hủy.', findings: [], metadata: { summary: { total: 0, byCategory: {}, bySeverity: {} } } };
     }
-    return { ok: false, error: error?.message || 'Project scan failed', findings: [], metadata: { summary: { total: 0, byCategory: {}, bySeverity: {} } } };
+    return { ok: false, error: error?.message || 'Quét mã nguồn thất bại', findings: [], metadata: { summary: { total: 0, byCategory: {}, bySeverity: {} } } };
   } finally {
     if (currentScanAbort === ac) currentScanAbort = null;
   }
@@ -92,12 +95,12 @@ ipcMain.handle('scan:stop', () => {
     currentScanAbort.abort('User cancelled');
     return { ok: true };
   }
-  return { ok: false, error: 'No active scan' };
+  return { ok: false, error: 'Không có phiên quét đang chạy' };
 });
 
 ipcMain.handle('checklist:get', async () => {
   try { return { ok: true, data: getChecklist() }; }
-  catch (error) { return { ok: false, error: error?.message || 'Checklist load failed' }; }
+  catch (error) { return { ok: false, error: error?.message || 'Tải Checklist thất bại' }; }
 });
 
 ipcMain.handle('dialog:pickFolder', async () => {
@@ -107,7 +110,20 @@ ipcMain.handle('dialog:pickFolder', async () => {
 });
 
 ipcMain.handle('docs:open', async (_event, url) => {
-  try { await shell.openExternal(url); return { ok: true }; }
+  try {
+    const parsed = new URL(String(url || ''));
+    const allowedHosts = new Set([
+      'owasp.org',
+      'cheatsheetseries.owasp.org',
+      'github.com',
+      'developer.mozilla.org',
+    ]);
+    if (parsed.protocol !== 'https:' || !allowedHosts.has(parsed.hostname)) {
+      throw new Error('Blocked external URL');
+    }
+    await shell.openExternal(parsed.toString());
+    return { ok: true };
+  }
   catch (error) { return { ok: false, error: error?.message }; }
 });
 
@@ -120,22 +136,85 @@ const AI_ALLOWED_HOSTS = new Set([
   'generativelanguage.googleapis.com',
 ]);
 
+const AI_PROVIDER_CONFIG = {
+  openrouter: {
+    hosts: new Set(['openrouter.ai']),
+    envKeys: ['OPENROUTER_API_KEY', 'VITE_OPENROUTER_API_KEY'],
+    auth: 'bearer',
+  },
+  groq: {
+    hosts: new Set(['api.groq.com']),
+    envKeys: ['GROQ_API_KEY', 'VITE_GROQ_API_KEY'],
+    auth: 'bearer',
+  },
+  together: {
+    hosts: new Set(['api.together.xyz']),
+    envKeys: ['TOGETHER_API_KEY', 'VITE_TOGETHER_API_KEY'],
+    auth: 'bearer',
+  },
+  huggingface: {
+    hosts: new Set(['api-inference.huggingface.co']),
+    envKeys: ['HF_API_KEY', 'HUGGINGFACE_API_KEY', 'VITE_HF_API_KEY'],
+    auth: 'bearer',
+  },
+  gemini: {
+    hosts: new Set(['generativelanguage.googleapis.com']),
+    envKeys: ['GEMINI_API_KEY', 'VITE_GEMINI_API_KEY'],
+    auth: 'query-key',
+  },
+};
+
+function getEnvValue(names) {
+  for (const name of names) {
+    const value = process.env[name];
+    if (value && value.trim()) return value.trim();
+  }
+  return '';
+}
+
+function getProviderConfig(providerId, host) {
+  const cfg = AI_PROVIDER_CONFIG[String(providerId || '').toLowerCase()];
+  if (!cfg || !cfg.hosts.has(host)) return null;
+  return cfg;
+}
+
 ipcMain.handle('ai:fetch', async (_event, payload) => {
   const url = payload?.url || '';
   const method = payload?.method || 'POST';
-  const headers = payload?.headers || {};
+  const headers = { ...(payload?.headers || {}) };
   const body = payload?.body || '';
-  const timeoutMs = payload?.timeoutMs || 15_000;
+  const timeoutMs = Math.min(Math.max(Number(payload?.timeoutMs || 15_000), 1000), 60_000);
+  const providerId = String(payload?.providerId || '').toLowerCase();
 
   try {
-    const parsed = new URL(url);
+    let parsed = new URL(url);
     if (parsed.protocol !== 'https:') throw new Error('Blocked non-HTTPS URL');
     if (!AI_ALLOWED_HOSTS.has(parsed.host)) throw new Error('Blocked host');
+    if (!['POST'].includes(method.toUpperCase())) throw new Error('Blocked AI method');
+    for (const name of Object.keys(headers)) {
+      if (!/^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(name)) throw new Error('Blocked invalid header');
+    }
+
+    const provider = getProviderConfig(providerId, parsed.host);
+    if (!provider) throw new Error('Blocked provider/host pair');
+
+    const apiKey = getEnvValue(provider.envKeys);
+    if (!apiKey) {
+      return { ok: false, status: 401, body: '', error: `Missing API key for ${providerId}` };
+    }
+
+    delete headers.Authorization;
+    delete headers.authorization;
+    if (provider.auth === 'bearer') {
+      headers.Authorization = `Bearer ${apiKey}`;
+    } else if (provider.auth === 'query-key') {
+      parsed.searchParams.set('key', apiKey);
+    }
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-    const res = await fetch(url, {
+    const res = await fetch(parsed.toString(), {
       method,
       headers,
       body,
@@ -153,6 +232,13 @@ ipcMain.handle('ai:fetch', async (_event, payload) => {
   }
 });
 
+ipcMain.handle('ai:providers', async () => {
+  return Object.fromEntries(Object.entries(AI_PROVIDER_CONFIG).map(([id, cfg]) => [
+    id,
+    { configured: Boolean(getEnvValue(cfg.envKeys)) },
+  ]));
+});
+
 ipcMain.handle('report:export', async (_event, payload) => {
   try {
     const format     = payload?.format === 'json' ? 'json' : 'html';
@@ -161,7 +247,7 @@ ipcMain.handle('report:export', async (_event, payload) => {
 
     const content    = format === 'json' ? buildJsonReport(scanResult) : buildHtmlReport(scanResult);
     const saveResult = await dialog.showSaveDialog({
-      title: 'Export report',
+      title: 'Xuất báo cáo',
       defaultPath: getSuggestedFilename(scanResult, format),
       filters: format === 'json'
         ? [{ name: 'JSON', extensions: ['json'] }]
@@ -172,7 +258,7 @@ ipcMain.handle('report:export', async (_event, payload) => {
     await fs.writeFile(saveResult.filePath, content, 'utf8');
     return { ok: true, filePath: saveResult.filePath };
   } catch (error) {
-    return { ok: false, error: error?.message || 'Export failed' };
+    return { ok: false, error: error?.message || 'Xuất báo cáo thất bại' };
   }
 });
 

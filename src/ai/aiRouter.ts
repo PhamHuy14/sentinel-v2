@@ -32,7 +32,7 @@ export interface AIChatMessage {
 }
 
 export const HISTORY_TURNS = Number(
-  (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_LLM_HISTORY_TURNS || '20'
+  import.meta.env.VITE_LLM_HISTORY_TURNS || '20'
 );
 
 interface FaqEntry {
@@ -491,7 +491,7 @@ let lastThanksIdx = -1;
 // ── Câu trả lời cho các nội dung ngoài phạm vi ────────────────────────────────────────────────────
 function buildOOSResponse(norm: string, topic: string | null, isPersonQuery = false): string {
   const suggestions = generateSmartSuggestions(norm, topic);
-  const suggestionText = suggestions.map(s => `- ${s}`).join('\n');
+  const suggestionText = suggestions.map((s: string) => `- ${s}`).join('\n');
 
   if (isPersonQuery) {
     return `## Ngoài phạm vi hỗ trợ\n\nTôi là **SENTINEL AI Assistant** — chuyên về bảo mật web và OWASP. Câu hỏi về danh tính cá nhân không nằm trong lĩnh vực của tôi.\n\n**Thử hỏi tôi về bảo mật:**\n${suggestionText}\n\n*Nhấn 💡 để xem toàn bộ câu hỏi được hỗ trợ.*`;
@@ -815,3 +815,4 @@ export const INPUT_PLACEHOLDER_HINTS = [
   'Subresource Integrity là gì?',
   '2FA/MFA bảo vệ như thế nào?',
 ];
+

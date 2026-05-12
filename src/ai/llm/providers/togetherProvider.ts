@@ -3,7 +3,7 @@
  *
  * Gói miễn phí: https://api.together.xyz
  * Mô hình: meta-llama/Llama-3.3-70B-Instruct-Turbo-Free (MIỄN PHÍ hoàn toàn)
- * Biến môi trường: VITE_TOGETHER_API_KEY
+ * Bien moi truong: TOGETHER_API_KEY (doc trong Electron main process)
  *
  * FIX v2.1:
  *  - Đổi model mặc định: Qwen/Qwen2.5-72B-Instruct-Turbo (tốn credit)
@@ -32,6 +32,7 @@ const FALLBACK_MODELS = [
 ];
 
 type AiFetch = (payload: {
+  providerId: 'together';
   url: string;
   method?: string;
   headers?: Record<string, string>;
@@ -58,7 +59,7 @@ function shouldParseJson(body: string, contentType: string): boolean {
 async function fetchJson(url: string, payload: { headers: Record<string, string>; body: string }, timeoutMs: number) {
   const aiFetch = getAiFetch();
   if (aiFetch) {
-    const resp = await aiFetch({ url, method: 'POST', headers: payload.headers, body: payload.body, timeoutMs });
+    const resp = await aiFetch({ providerId: 'together', url, method: 'POST', headers: payload.headers, body: payload.body, timeoutMs });
     return { ok: resp.ok, status: resp.status, body: resp.body || '', contentType: extractContentType(resp.headers) };
   }
 
@@ -80,10 +81,9 @@ async function fetchJson(url: string, payload: { headers: Record<string, string>
 
 /** Đọc danh sách model từ VITE_TOGETHER_MODELS hoặc dùng fallback mặc định */
 function resolveModelList(): string[] {
-  const env = (import.meta as unknown as Record<string, Record<string, string>>).env ?? {};
-  const fromEnv = env.VITE_TOGETHER_MODELS ?? env.VITE_TOGETHER_MODEL ?? '';
+  const fromEnv = import.meta.env.VITE_TOGETHER_MODELS ?? import.meta.env.VITE_TOGETHER_MODEL ?? '';
   if (fromEnv.trim()) {
-    return fromEnv.split(',').map(m => m.trim()).filter(Boolean);
+    return fromEnv.split(',').map((m: string) => m.trim()).filter(Boolean);
   }
   return FALLBACK_MODELS;
 }
@@ -93,20 +93,15 @@ export class TogetherProvider implements LLMProvider {
   readonly label = 'Together.ai (Llama-3.3 70B Free)';
   readonly supportsJsonMode = false;
 
-  private readonly apiKey: string;
   private readonly metrics: ProviderMetricsTracker;
   private readonly modelList: string[];
 
   constructor(metrics: ProviderMetricsTracker) {
-    const env = (import.meta as unknown as Record<string, Record<string, string>>).env ?? {};
-    this.apiKey = env.VITE_TOGETHER_API_KEY ?? '';
     this.metrics = metrics;
     this.modelList = resolveModelList();
   }
 
   async generate(prompt: string, options: GenerateOptions = {}): Promise<string> {
-    if (!this.apiKey) throw new ProviderError('auth_error', this.id, 'VITE_TOGETHER_API_KEY not set');
-
     const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT;
     const start = Date.now();
 
@@ -126,7 +121,6 @@ export class TogetherProvider implements LLMProvider {
       try {
         const headers = {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.apiKey}`,
         };
         const res = await fetchJson(TOGETHER_API_URL, { headers, body: JSON.stringify(body) }, timeoutMs);
         const latency = Date.now() - start;
@@ -134,6 +128,10 @@ export class TogetherProvider implements LLMProvider {
         if (res.status === 429) {
           this.metrics.recordFailure(this.id, latency);
           throw new ProviderError('rate_limit', this.id, 'Rate limit exceeded', 429);
+        }
+        if (res.status === 401 || res.status === 403) {
+          this.metrics.recordFailure(this.id, latency);
+          throw new ProviderError('auth_error', this.id, 'TOGETHER_API_KEY not set or rejected', res.status);
         }
 
         // FIX: 402 = hết credit. Các model "-Free" sẽ không bao giờ trả về 402.
@@ -192,11 +190,14 @@ export class TogetherProvider implements LLMProvider {
   }
 
   async health(): Promise<ProviderHealth> {
-    return this.metrics.getHealth(this.id, !this.apiKey);
+    return this.metrics.getHealth(this.id, false);
   }
 
   async estimateCostOrQuota(): Promise<number> {
     // Together free models: không giới hạn credit (chỉ rate-limited)
-    return this.apiKey ? 10_000 : 0;
+    return 10_000;
   }
 }
+
+
+

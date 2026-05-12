@@ -281,7 +281,7 @@ body {
    ══════════════════════════════════════════════════════════ */
 .workspace { display: grid; overflow: hidden; height: 100%; min-height: 0; }
 .workspace-scan-v2      { grid-template-columns: minmax(340px, 380px) minmax(0, 1fr); }
-.workspace-checklist-v2 { grid-template-columns: minmax(300px, 350px) minmax(0, 1fr); }
+.workspace-checklist-v2 { grid-template-columns: minmax(330px, 390px) minmax(0, 1fr); }
 
 .left-panel {
   display: flex; flex-direction: column;
@@ -1382,6 +1382,7 @@ kbd { font-family: var(--mono); font-size: 10.5px; color: var(--text); backgroun
 .chk-badge { font-family: var(--mono); font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px; border: 1px solid; }
 .chk-pass { font-size: 10px; color: var(--low); font-weight: 700; }
 .chk-name { font-size: 11px; color: var(--text-2); line-height: 1.35; }
+.chk-desc { margin-top: 3px; font-size: 10px; color: var(--text-3); line-height: 1.35; }
 .chk-sev  { font-size: 9.5px; font-family: var(--mono); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; margin-top: 2px; }
 .chk-empty-hint { display: flex; align-items: flex-start; gap: 8px; background: var(--bg-input); border: 1px solid var(--border-dim); border-radius: var(--r-sm); padding: 10px 12px; margin-bottom: 10px; }
 .chk-empty-icon { font-size: 18px; flex-shrink: 0; }
@@ -1439,6 +1440,7 @@ kbd { font-family: var(--mono); font-size: 10.5px; color: var(--text); backgroun
 }
 .chk-item-text { font-size: 12.5px; color: var(--text); line-height: 1.5; flex: 1; font-weight: 600; }
 .chk-item-text-done { text-decoration: line-through; color: var(--text-3); }
+.chk-item-meta { display: block; margin-top: 3px; font-size: 10px; color: var(--text-3); font-family: var(--mono); line-height: 1.35; font-weight: 500; text-decoration: none; }
 .chk-expand-btn {
   flex-shrink: 0;
   width: 20px; height: 20px;
@@ -1469,6 +1471,22 @@ kbd { font-family: var(--mono); font-size: 10.5px; color: var(--text); backgroun
 .chk-todo-item { font-size: 11.5px; color: var(--text-2); line-height: 1.45; padding: 4px 8px 4px 22px; position: relative; background: var(--bg-input); border-radius: var(--r-sm); border-left: 2px solid var(--accent-bright); }
 .chk-todo-item:before { content: "→"; position: absolute; left: 7px; color: var(--accent); font-size: 10px; top: 5px; }
 .chk-recommend-text { font-size: 11.5px; color: var(--text-2); line-height: 1.55; padding: 8px 10px; background: var(--accent-dim); border: 1px solid var(--accent-border); border-radius: var(--r-sm); border-left: 3px solid var(--accent-bright); }
+
+.checklist-left-stack { display: flex; flex-direction: column; gap: 12px; }
+.checklist-empty-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--r-md); padding: 16px; box-shadow: 0 1px 3px rgba(42,54,59,.05); }
+.checklist-source-card { background: var(--bg-card); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--r-md); padding: 12px 13px; box-shadow: 0 1px 3px rgba(42,54,59,.05); }
+.checklist-source-label { font-size: 10px; color: var(--text-3); text-transform: uppercase; letter-spacing: .08em; font-weight: 700; margin-bottom: 5px; }
+.checklist-source-title { font-size: 13px; color: var(--text); font-weight: 700; }
+.checklist-source-target { margin-top: 4px; font-size: 10.5px; color: var(--text-3); font-family: var(--mono); word-break: break-all; }
+.checklist-tech-stack { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.checklist-tech-chip { display: inline-flex; align-items: center; min-height: 22px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg-input); color: var(--text-2); font-size: 10.5px; font-family: var(--mono); }
+.checklist-muted { font-size: 11px; color: var(--text-3); line-height: 1.45; }
+.checklist-action-panel { display: flex; flex-direction: column; background: var(--bg-panel); }
+.checklist-clean-state { padding: 14px; border: 1px dashed var(--border); border-radius: var(--r-md); background: var(--bg-input); color: var(--text-3); font-size: 12px; text-align: center; }
+.checklist-severity-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.checklist-severity-pill { display: inline-flex; align-items: center; min-height: 22px; padding: 2px 8px; border: 1px solid; border-radius: 999px; background: var(--bg-input); font-family: var(--mono); font-size: 10px; font-weight: 700; }
+.checklist-bars { display: flex; flex-direction: column; gap: 5px; }
+.checklist-mini-meta { margin-top: 10px; }
 
 /* ══════════════════════════════════════════════════════════
    GUIDE PANEL (sidebar)
@@ -1601,6 +1619,41 @@ kbd { font-family: var(--mono); font-size: 10.5px; color: var(--text); backgroun
 @media (max-width: 1180px) {
   .filter-bar-adv { gap: 6px; padding: 8px 14px; margin: 0 -14px; }
   .right-panel    { padding: 14px 14px; }
+}
+
+@media (max-width: 860px) {
+  .workspace-checklist-v2 {
+    display: block;
+    overflow-y: auto;
+    overflow-x: hidden;
+    width: 100vw;
+    max-width: 100vw;
+  }
+
+  .workspace-checklist-v2 .left-panel,
+  .workspace-checklist-v2 .right-panel {
+    overflow: visible;
+    border-right: 0;
+    min-height: auto;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .workspace-checklist-v2 .left-panel {
+    padding-bottom: 12px;
+  }
+
+  .workspace-checklist-v2 .right-panel {
+    padding: 12px 14px 96px;
+  }
+
+  .rp-empty-steps {
+    flex-direction: column;
+  }
+
+  .rp-empty-arrow {
+    display: none;
+  }
 }
 
 /* ══════════════════════════════════════════════════════════

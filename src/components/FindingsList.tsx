@@ -20,7 +20,7 @@ export const FindingsList: React.FC = () => {
     return (
       <div className="card findings-panel">
         <div className="loading-spinner"></div>
-        <p>Scanning in progress...</p>
+        <p>Đang quét...</p>
       </div>
     );
   }
@@ -28,7 +28,7 @@ export const FindingsList: React.FC = () => {
   if (error) {
     return (
       <div className="card findings-panel error-panel">
-        <h3>⚠️ Scan Error</h3>
+        <h3>⚠️ Lỗi quét</h3>
         <p>{error}</p>
       </div>
     );
@@ -37,7 +37,7 @@ export const FindingsList: React.FC = () => {
   if (!scanResult) {
     return (
       <div className="card findings-panel empty-panel">
-        <p>✨ No scan performed yet. Use the form above to start a security assessment.</p>
+        <p>✨ Chưa có lần quét nào. Dùng biểu mẫu phía trên để bắt đầu đánh giá bảo mật.</p>
       </div>
     );
   }
@@ -48,19 +48,19 @@ export const FindingsList: React.FC = () => {
   return (
     <div className="card findings-panel">
       <div className="findings-header">
-        <h3>🔎 Scan Results</h3>
+        <h3>🔎 Kết quả quét</h3>
         <ReportExportButton />
       </div>
       <div className="scan-info">
-        <p><strong>Mode:</strong> {mode === 'url-scan' ? 'URL Scan' : 'Project Scan'}</p>
-        <p><strong>Target:</strong> {target || scanResult.scannedUrl}</p>
-        {scanResult.finalUrl && <p><strong>Final URL:</strong> {scanResult.finalUrl}</p>}
+        <p><strong>Chế độ:</strong> {mode === 'url-scan' ? 'URL Scan' : 'Project Scan'}</p>
+        <p><strong>Mục tiêu:</strong> {target || scanResult.scannedUrl}</p>
+        {scanResult.finalUrl && <p><strong>URL cuối:</strong> {scanResult.finalUrl}</p>}
         {scanResult.status && <p><strong>HTTP Status:</strong> {scanResult.status}</p>}
-        {scanResult.title && <p><strong>Page Title:</strong> {scanResult.title}</p>}
+        {scanResult.title && <p><strong>Tiêu đề trang:</strong> {scanResult.title}</p>}
       </div>
 
       <div className="summary-stats">
-        <div className="stat">Total Findings: <strong>{summary.total}</strong></div>
+        <div className="stat">Tổng findings: <strong>{summary.total}</strong></div>
         <div className="stat-categories">
           {Object.entries(summary.bySeverity).map(([sev, count]) => (
             <span key={sev} className={`stat-badge ${severityColor(sev)}`}>

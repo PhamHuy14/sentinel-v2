@@ -1,81 +1,82 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useStore } from '../store/useStore';
-import { ScanResult } from '../types';
-import { ChecklistItem } from './ChecklistPanel';
+import { Finding, ScanResult } from '../types';
+import { formatOwaspCategory } from '../utils/owasp';
+import { ChecklistItem, sevColor } from './ChecklistPanel';
 
-// ─── Design Review questions + details ────────────────────────────────────────
+const SEV_ORDER: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
+
 const DESIGN_QUESTIONS = [
-  'Có threat model cho luồng đăng nhập, thanh toán và thao tác admin.',
-  'Có abuse cases cho brute force, IDOR, privilege escalation, destructive action.',
-  'Có xác định trust boundary giữa client, API, DB, bên thứ ba.',
-  'Có thiết kế rate limiting / throttling cho luồng nhạy cảm.',
-  'Có default deny / least privilege cho route và dữ liệu.',
-  'Có fail-safe behavior khi lỗi timeout, parse lỗi, service phụ chết.',
-  'Có data classification cho PII, credentials, tokens, secrets.',
-  'Có review thiết kế bảo mật trước khi release.',
+  'Co threat model cho login, thanh toan, admin va thao tac destructive.',
+  'Có abuse cases cho brute force, IDOR, privilege escalation và SSRF.',
+  'Có trust boundary rõ ràng giữa client, API, DB và bên thứ ba.',
+  'Có rate limiting/throttling cho endpoint nhạy cảm.',
+  'Có default deny và least privilege cho route và dữ liệu.',
+  'Có fail-safe behavior khi timeout, parse lỗi hoặc service phụ bị lỗi.',
+  'Co data classification cho PII, token, credentials va secret.',
+  'Có security review trước release và ghi lại decision quan trọng.',
 ];
 
-const DESIGN_QUESTION_DETAILS: Record<number, { todos: string[]; recommend: string }> = {
+const DESIGN_DETAILS: Record<number, { todos: string[]; recommend: string }> = {
   0: {
-    todos: ['Vẽ sơ đồ luồng đăng nhập, thanh toán, thao tác admin', 'Xác định tài sản cần bảo vệ (data, operations)', 'Liệt kê các actor và quyền hạn của từng actor', 'Tài liệu hóa threat model (STRIDE hoặc PASTA)'],
-    recommend: 'Dùng OWASP Threat Dragon hoặc draw.io để vẽ threat model. Ưu tiên luồng có tiền tệ và dữ liệu nhạy cảm trước.',
+    todos: ['Vẽ data flow cho luồng nhạy cảm', 'Xác định tài sản cần bảo vệ', 'Ghi threat và control tương ứng'],
+    recommend: 'Bắt đầu với STRIDE cho luồng có auth/admin/payment.',
   },
   1: {
-    todos: ['Liệt kê các abuse cases: brute force login, IDOR, privilege escalation', 'Viết test cases cho từng abuse case', 'Xác định rate limit phù hợp cho từng endpoint nhạy cảm', 'Thêm CAPTCHA hoặc lockout cho đăng nhập thất bại nhiều lần'],
-    recommend: 'Mỗi user story nên có ít nhất 1 abuse case tương ứng. Dùng OWASP Testing Guide cho checklist kiểm thử.',
+    todos: ['Viết abuse case tương ứng với user story', 'Thêm test cho IDOR/brute force', 'Gán owner cho từng control'],
+    recommend: 'Checklist tot nhat la checklist co test hoac bang chung kem theo.',
   },
   2: {
-    todos: ['Vẽ sơ đồ trust boundary: client ↔ API ↔ DB ↔ 3rd party', 'Xác định dữ liệu nào được phép vượt boundary', 'Review mọi integration với bên thứ 3 (OAuth, payment, webhook)', 'Đảm bảo validate & sanitize tại mỗi boundary'],
-    recommend: 'Dùng Data Flow Diagram (DFD) để visualize boundary. Mọi dữ liệu từ bên ngoài đều phải bị coi là untrusted.',
+    todos: ['Đánh dấu input untrusted tại mọi boundary', 'Validate server-side', 'Review OAuth/webhook/payment integration'],
+    recommend: 'Mỗi boundary nên có validation, auth, logging và error handling rõ ràng.',
   },
   3: {
-    todos: ['Implement rate limiting cho: login, register, forgot password, OTP', 'Implement rate limiting cho API endpoint nhạy cảm', 'Cấu hình response chậm dần (exponential backoff) khi fail nhiều', 'Log và alert khi phát hiện brute force pattern'],
-    recommend: 'Dùng thư viện như express-rate-limit (Node), Bucket4j (Java). Rate limit nên áp dụng theo IP + account.',
+    todos: ['Rate limit login/register/reset password', 'Ket hop IP + account key', 'Canh bao khi co pattern bat thuong'],
+    recommend: 'Dùng backoff mềm thay vì lockout cứng nếu trải nghiệm người dùng quan trọng.',
   },
   4: {
-    todos: ['Kiểm tra mọi route có require authentication mặc định', 'Áp dụng least privilege: user chỉ thấy dữ liệu của chính họ', 'Review admin endpoints có require role check không', 'Deny by default, whitelist những gì được phép'],
-    recommend: 'Tránh kiểu "open by default, restrict later". Dùng middleware auth trước route handler, không check trong từng controller.',
+    todos: ['Mặc định route phải cần auth', 'Check role/permission ở server', 'Không đưa authorization logic vào client'],
+    recommend: 'Policy/guard tap trung giup tranh bo sot endpoint moi.',
   },
   5: {
-    todos: ['Test behavior khi DB timeout, service phụ chết, parse lỗi', 'Đảm bảo không leak stack trace hay internal error ra ngoài', 'Implement graceful degradation cho các feature không critical', 'Log đầy đủ lỗi ở server, trả về generic message cho client'],
-    recommend: 'Dùng circuit breaker pattern (Hystrix, Resilience4j). Tất cả exception phải được catch và handle — không để unhandled rejection.',
+    todos: ['Tra generic error cho client', 'Log chi tiet o server', 'Test timeout va malformed input'],
+    recommend: 'Fail closed voi authz/payment/admin flow.',
   },
   6: {
-    todos: ['Phân loại dữ liệu: Public / Internal / Confidential / Secret', 'Mã hóa PII và credentials ở rest (AES-256) và transit (TLS 1.2+)', 'Không log PII, credentials, token, secrets', 'Review data retention policy và xóa dữ liệu sau khi hết hạn'],
-    recommend: 'Dùng GDPR / PDPA làm baseline cho data classification. Secrets phải được lưu trong vault (HashiCorp Vault, AWS Secrets Manager).',
+    todos: ['Không log secret/PII', 'Mã hóa dữ liệu nhạy cảm', 'Đặt retention và xóa dữ liệu hết hạn'],
+    recommend: 'Secret nên nằm trong vault hoặc environment của main process, không vào renderer bundle.',
   },
   7: {
-    todos: ['Tổ chức security design review trước sprint release', 'Checklist review bao gồm: auth, authz, input validation, crypto, logging', 'Có ít nhất 1 security engineer sign-off trước khi merge', 'Document các security decision và trade-off'],
-    recommend: 'Tích hợp security review vào Definition of Done. Dùng OWASP ASVS Level 1 làm baseline tối thiểu cho mọi release.',
+    todos: ['Đặt security review trong Definition of Done', 'Ghi risk acceptance nếu chưa fix', 'Review lại sau mỗi release lớn'],
+    recommend: 'Dung OWASP ASVS Level 1 lam baseline thuc te.',
   },
 };
 
-// ─── Scan summary block ───────────────────────────────────────────────────────
 function ScanSummaryBlock({ scanResult }: { scanResult: ScanResult }) {
-  const { findings, metadata } = scanResult;
-  const bySev = metadata.summary.bySeverity;
-  const byCat = metadata.summary.byCategory;
+  const bySev = scanResult.metadata.summary.bySeverity || {};
+  const byCat = scanResult.metadata.summary.byCategory || {};
   const maxCat = Math.max(1, ...Object.values(byCat));
 
   return (
     <>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-        {(['critical','high','medium','low'] as const).map(sev => {
-          const n = bySev[sev] || 0;
-          if (!n) return null;
-          const cls: Record<string, string> = { critical: 'chip-crit', high: 'chip-high', medium: 'chip-med', low: 'chip-low' };
-          return <span key={sev} className={`sev-chip ${cls[sev]}`}>{sev.slice(0,4).toUpperCase()} {n}</span>;
+      <div className="checklist-severity-row">
+        {(['critical', 'high', 'medium', 'low'] as const).map((sev) => {
+          const count = bySev[sev] || 0;
+          return (
+            <span key={sev} className="checklist-severity-pill" style={{ color: sevColor(sev), borderColor: `${sevColor(sev)}55` }}>
+              {sev.slice(0, 4).toUpperCase()} {count}
+            </span>
+          );
         })}
-        {findings.length === 0 && <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Không có findings</span>}
       </div>
+
       {Object.keys(byCat).length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-          <div className="rg-bars-hdr">Phân bổ theo OWASP Category</div>
-          {Object.entries(byCat).sort((a,b) => b[1]-a[1]).map(([cat, count]) => (
-            <div key={cat} className="rg-bar-row">
-              <span className="rg-bar-cat">{cat}</span>
+        <div className="checklist-bars">
+          {Object.entries(byCat).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([category, count]) => (
+            <div key={category} className="rg-bar-row">
+              <span className="rg-bar-cat">{category}</span>
               <div className="rg-bar-track">
-                <div className="rg-bar-fill" style={{ width: `${(count/maxCat)*100}%`, background: 'var(--accent)' }} />
+                <div className="rg-bar-fill" style={{ width: `${(count / maxCat) * 100}%` }} />
               </div>
               <span className="rg-bar-n">{count}</span>
             </div>
@@ -86,38 +87,63 @@ function ScanSummaryBlock({ scanResult }: { scanResult: ScanResult }) {
   );
 }
 
-// ─── Main ChecklistRightPanel ─────────────────────────────────────────────────
+function buildFindingActions(findings: Finding[]) {
+  return findings
+    .slice()
+    .sort((a, b) => {
+      const severityDiff = SEV_ORDER[b.severity] - SEV_ORDER[a.severity];
+      if (severityDiff !== 0) return severityDiff;
+      return a.ruleId.localeCompare(b.ruleId);
+    })
+    .slice(0, 16)
+    .map((finding) => ({
+      id: `finding-action::${finding.ruleId}::${finding.target}::${finding.location}`.toLowerCase(),
+      severity: finding.severity,
+      label: `${finding.ruleId} - ${finding.title}`,
+      meta: `${formatOwaspCategory(finding.owaspCategory)} | ${finding.collector}`,
+      todos: [
+        finding.target ? `Xac minh target: ${finding.target}` : 'Xac minh pham vi anh huong.',
+        finding.location ? `Kiểm tra vị trí: ${finding.location}` : 'Xác định vị trí code/config/runtime liên quan.',
+        finding.evidence?.[0] ? `Đối chiếu evidence: ${finding.evidence[0]}` : 'Bổ sung bằng chứng tái hiện nếu cần.',
+      ],
+      recommend: finding.remediation || 'Lập fix plan, thêm test/regression và quét lại sau khi sửa.',
+    }));
+}
+
 export const ChecklistRightPanel: React.FC = () => {
-  const { projectScanResult, urlScanResult, urlScanIsLocal, urlInput, checklist } = useStore();
+  const {
+    projectScanResult,
+    urlScanResult,
+    checklist,
+    checkedChecklistItems,
+    getCombinedFindings,
+  } = useStore();
   const [hideCompleted, setHideCompleted] = useState(false);
 
-  const hasProjectScan = !!projectScanResult;
-  const hasUrlLocal    = urlScanIsLocal && !!urlScanResult;
-  const hasAny         = hasProjectScan || hasUrlLocal;
-
-  // Lấy design questions từ checklist data hoặc dùng default
-  const designQuestions = checklist?.designQuestions?.length
-    ? checklist.designQuestions
-    : DESIGN_QUESTIONS;
-
-  // Đếm progress
-  const { checkedChecklistItems } = useStore();
-  const designIds = designQuestions.map((_, i) => `design-${i}`);
-  const doneCount = designIds.filter(id => checkedChecklistItems.includes(id)).length;
+  const hasProjectScan = Boolean(projectScanResult);
+  const hasUrlScan = Boolean(urlScanResult);
+  const hasAny = hasProjectScan || hasUrlScan;
+  const combinedFindings = getCombinedFindings();
+  const findingActions = useMemo(() => buildFindingActions(combinedFindings), [combinedFindings]);
+  const designQuestions = checklist?.designQuestions?.length ? checklist.designQuestions : DESIGN_QUESTIONS;
+  const designIds = designQuestions.map((_, index) => `design-${index}`);
+  const doneCount = designIds.filter((id) => checkedChecklistItems.includes(id)).length;
   const completionRate = Math.round((doneCount / Math.max(1, designQuestions.length)) * 100);
 
   if (!hasAny) {
     return (
-      <div className="empty-state">
-        <div className="empty-icon">☑</div>
-        <p>
-          Chạy <strong style={{ color: 'var(--accent)' }}>Project Scan</strong> hoặc{' '}
-          <strong style={{ color: 'var(--accent)' }}>URL Scan</strong> (localhost) để tạo checklist.
-        </p>
-        <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 10, lineHeight: 1.6 }}>
-          <span style={{ color: 'var(--med)' }}>⚠️</span> Chạy <strong>cả hai</strong> để phát hiện đầy đủ —
-          URL Scan tìm lỗi runtime, Project Scan tìm lỗi trong source code.
-        </p>
+      <div className="rp-empty">
+        <div className="rp-empty-steps">
+          <div className="rp-empty-step">
+            <div className="rp-empty-num">1</div>
+            <div className="rp-empty-text">Chạy URL Scan hoặc Project Scan</div>
+          </div>
+          <div className="rp-empty-arrow">→</div>
+          <div className="rp-empty-step">
+            <div className="rp-empty-num">2</div>
+            <div className="rp-empty-text">Checklist sẽ xuất hiện tại đây</div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -125,108 +151,93 @@ export const ChecklistRightPanel: React.FC = () => {
   return (
     <div className="checklist-shell checklist-shell-v3">
       <div className="checklist-summary-grid">
-        {hasUrlLocal && urlScanResult && (
+        {urlScanResult && (
           <div className="section checklist-summary-card">
             <div className="checklist-summary-head">
               <div className="section-label" style={{ marginBottom: 0 }}>URL Scan</div>
-              <span className="checklist-summary-badge">localhost</span>
+              <span className="checklist-summary-badge">runtime</span>
             </div>
-            <div className="checklist-summary-target">
-              {urlScanResult.scannedUrl || urlInput}
-            </div>
+            <div className="checklist-summary-target">{urlScanResult.scannedUrl || urlScanResult.finalUrl}</div>
             <ScanSummaryBlock scanResult={urlScanResult} />
           </div>
         )}
 
-        {hasProjectScan && projectScanResult && (
+        {projectScanResult && (
           <div className="section checklist-summary-card">
             <div className="checklist-summary-head">
               <div className="section-label" style={{ marginBottom: 0 }}>Project Scan</div>
+              <span className="checklist-summary-badge">source</span>
             </div>
             <ScanSummaryBlock scanResult={projectScanResult} />
-            {projectScanResult.metadata?.scannedFiles !== undefined && (
-              <div className="meta-table" style={{ marginTop: 10 }}>
-                <div className="meta-row">
-                  <span className="meta-key">Số file đã quét</span>
-                  <span className="meta-val">{projectScanResult.metadata.scannedFiles}</span>
-                </div>
-                {projectScanResult.metadata.packageJsonFound !== undefined && (
-                  <div className="meta-row">
-                    <span className="meta-key">package.json</span>
-                    <span className={`meta-val ${projectScanResult.metadata.packageJsonFound ? 'ok' : ''}`}>
-                      {projectScanResult.metadata.packageJsonFound ? 'Có' : 'Không'}
-                    </span>
-                  </div>
-                )}
-                {projectScanResult.metadata.configCount !== undefined && (
-                  <div className="meta-row">
-                    <span className="meta-key">File cấu hình</span>
-                    <span className="meta-val">{projectScanResult.metadata.configCount}</span>
-                  </div>
-                )}
-                <div className="meta-row">
-                  <span className="meta-key">Tổng số findings</span>
-                  <span className="meta-val">{projectScanResult.findings.length}</span>
-                </div>
-              </div>
-            )}
+            <div className="meta-table checklist-mini-meta">
+              <div className="meta-row"><span className="meta-key">Files</span><span className="meta-val">{projectScanResult.metadata.scannedFiles ?? 0}</span></div>
+              <div className="meta-row"><span className="meta-key">Config</span><span className="meta-val">{projectScanResult.metadata.configCount ?? 0}</span></div>
+              <div className="meta-row"><span className="meta-key">Tech</span><span className="meta-val">{projectScanResult.metadata.techStack?.join(', ') || 'N/A'}</span></div>
+            </div>
           </div>
         )}
 
-        <div className="checklist-summary-tip section">
-          {hasUrlLocal && hasProjectScan ? (
-            <>
-              <span className="checklist-tip-title">Checklist kết hợp.</span>{' '}
-              Findings từ cả hai nguồn đã được gộp, mục trùng lặp chỉ hiển thị một lần.
-            </>
-          ) : (
-            <>
-              <span className="checklist-tip-title">Tip:</span>{' '}
-              {!hasUrlLocal
-                ? 'Chạy thêm URL Scan (localhost) để phát hiện lỗi runtime và kết hợp vào checklist.'
-                : 'Chạy thêm Project Scan để phát hiện lỗi source code và kết hợp vào checklist.'}
-            </>
-          )}
+        <div className="section checklist-summary-tip">
+          <span className="checklist-tip-title">Logic hiện tại: </span>
+          Checklist lấy findings từ cả URL Scan và Project Scan, dedupe theo rule/category/severity, rồi tạo backlog ưu tiên theo severity.
         </div>
+      </div>
+
+      <div className="section checklist-action-panel">
+        <div className="chk-section-header checklist-review-head">
+          <div>
+            <div className="section-label" style={{ marginBottom: 2 }}>Việc cần xử lý từ findings</div>
+            <div className="checklist-muted">{findingActions.length} mục ưu tiên cao nhất được tạo từ kết quả quét.</div>
+          </div>
+          <button type="button" className="btn-checklist-toggle" onClick={() => setHideCompleted((v) => !v)}>
+            {hideCompleted ? 'Hiện đã xong' : 'Ẩn đã xong'}
+          </button>
+        </div>
+
+        {findingActions.length > 0 ? (
+          <div className="chk-items-list">
+            {findingActions.map((action) => (
+              <ChecklistItem
+                key={action.id}
+                id={action.id}
+                label={action.label}
+                meta={action.meta}
+                severity={action.severity}
+                hideCompleted={hideCompleted}
+                todos={action.todos}
+                recommend={action.recommend}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="checklist-clean-state">
+            Không có finding nào cần xử lý. Vẫn nên hoàn tất phần đánh giá thiết kế bên dưới.
+          </div>
+        )}
       </div>
 
       <div className="section checklist-review-panel">
         <div className="chk-section-header checklist-review-head">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0, flex: 1 }}>
-            <div className="section-label" style={{ marginBottom: 0 }}>Đánh giá thiết kế</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="section-label" style={{ marginBottom: 4 }}>Đánh giá thiết kế</div>
             <div className="checklist-progress-row">
               <div className="checklist-progress-track">
-                <div
-                  style={{
-                    width: `${(doneCount / designQuestions.length) * 100}%`,
-                    height: '100%'
-                  }}
-                  className="checklist-progress-fill"
-                />
+                <div className="checklist-progress-fill" style={{ width: `${completionRate}%` }} />
               </div>
-              <span className="checklist-progress-badge">
-                {doneCount}/{designQuestions.length} · {completionRate}%
-              </span>
+              <span className="checklist-progress-badge">{doneCount}/{designQuestions.length} - {completionRate}%</span>
             </div>
           </div>
-          <button
-            className="btn-checklist-toggle"
-            onClick={() => setHideCompleted(v => !v)}
-            title={hideCompleted ? 'Hiện mục đã hoàn thành' : 'Ẩn mục đã hoàn thành'}
-          >
-            {hideCompleted ? 'Hiện đủ' : 'Ẩn đã xong'}
-          </button>
         </div>
 
-        <div className="chk-items-list" style={{ marginTop: 10 }}>
-          {designQuestions.map((q, i) => (
+        <div className="chk-items-list">
+          {designQuestions.map((question, index) => (
             <ChecklistItem
-              key={`design-${i}`}
-              id={`design-${i}`}
-              label={q}
+              key={`design-${index}`}
+              id={`design-${index}`}
+              label={question}
               hideCompleted={hideCompleted}
-              todos={DESIGN_QUESTION_DETAILS[i]?.todos}
-              recommend={DESIGN_QUESTION_DETAILS[i]?.recommend}
+              todos={DESIGN_DETAILS[index]?.todos}
+              recommend={DESIGN_DETAILS[index]?.recommend}
             />
           ))}
         </div>

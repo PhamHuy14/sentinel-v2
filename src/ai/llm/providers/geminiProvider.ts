@@ -3,7 +3,7 @@
  *
  * Gói miễn phí: https://aistudio.google.com
  * Mô hình: gemini-2.0-flash (model mới nhất, nhanh, miễn phí)
- * Biến môi trường: VITE_GEMINI_API_KEY
+ * Bien moi truong: GEMINI_API_KEY (doc trong Electron main process)
  *
  * FIX v2.1:
  *  - Đổi model mặc định: gemini-1.5-flash → gemini-2.0-flash (mới hơn, tốt hơn)
@@ -31,6 +31,7 @@ const FALLBACK_MODELS = [
 ];
 
 type AiFetch = (payload: {
+  providerId: 'gemini';
   url: string;
   method?: string;
   headers?: Record<string, string>;
@@ -57,7 +58,7 @@ function shouldParseJson(body: string, contentType: string): boolean {
 async function fetchJson(url: string, payload: { headers: Record<string, string>; body: string }, timeoutMs: number, signal?: AbortSignal) {
   const aiFetch = getAiFetch();
   if (aiFetch) {
-    const resp = await aiFetch({ url, method: 'POST', headers: payload.headers, body: payload.body, timeoutMs });
+    const resp = await aiFetch({ providerId: 'gemini', url, method: 'POST', headers: payload.headers, body: payload.body, timeoutMs });
     return { ok: resp.ok, status: resp.status, body: resp.body || '', contentType: extractContentType(resp.headers) };
   }
 
@@ -92,11 +93,10 @@ interface GeminiResponse {
 
 /** Đọc danh sách model từ VITE_GEMINI_MODELS hoặc dùng fallback mặc định */
 function resolveModelList(): string[] {
-  const env = (import.meta as unknown as Record<string, Record<string, string>>).env ?? {};
   // FIX: Hỗ trợ cả VITE_GEMINI_MODELS (mới) và VITE_GEMINI_MODEL (cũ)
-  const fromEnv = env.VITE_GEMINI_MODELS ?? env.VITE_GEMINI_MODEL ?? '';
+  const fromEnv = import.meta.env.VITE_GEMINI_MODELS ?? import.meta.env.VITE_GEMINI_MODEL ?? '';
   if (fromEnv.trim()) {
-    return fromEnv.split(',').map(m => m.trim()).filter(Boolean);
+    return fromEnv.split(',').map((m: string) => m.trim()).filter(Boolean);
   }
   return FALLBACK_MODELS;
 }
@@ -106,20 +106,15 @@ export class GeminiProvider implements LLMProvider {
   readonly label = 'Gemini (2.0 Flash)';
   readonly supportsJsonMode = false;
 
-  private readonly apiKey: string;
   private readonly metrics: ProviderMetricsTracker;
   private readonly modelList: string[];
 
   constructor(metrics: ProviderMetricsTracker) {
-    const env = (import.meta as unknown as Record<string, Record<string, string>>).env ?? {};
-    this.apiKey = env.VITE_GEMINI_API_KEY ?? '';
     this.metrics = metrics;
     this.modelList = resolveModelList();
   }
 
   async generate(prompt: string, options: GenerateOptions = {}): Promise<string> {
-    if (!this.apiKey) throw new ProviderError('auth_error', this.id, 'VITE_GEMINI_API_KEY not set');
-
     const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT;
     const start = Date.now();
     const systemPrompt = options.systemPrompt ?? 'You are a helpful security assistant.';
@@ -139,7 +134,7 @@ export class GeminiProvider implements LLMProvider {
       };
 
       try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.apiKey}`;
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
         const headers = { 'Content-Type': 'application/json' };
         const res = await fetchJson(url, { headers, body: JSON.stringify(body) }, timeoutMs, options.signal);
         const latency = Date.now() - start;
@@ -147,6 +142,10 @@ export class GeminiProvider implements LLMProvider {
         if (res.status === 429) {
           this.metrics.recordFailure(this.id, latency);
           throw new ProviderError('rate_limit', this.id, 'Rate limit exceeded', 429);
+        }
+        if (res.status === 401 || res.status === 403) {
+          this.metrics.recordFailure(this.id, latency);
+          throw new ProviderError('auth_error', this.id, 'GEMINI_API_KEY not set or rejected', res.status);
         }
 
         // FIX: 404 = model không tồn tại → thử model tiếp theo
@@ -208,11 +207,14 @@ export class GeminiProvider implements LLMProvider {
   }
 
   async health(): Promise<ProviderHealth> {
-    return this.metrics.getHealth(this.id, !this.apiKey);
+    return this.metrics.getHealth(this.id, false);
   }
 
   async estimateCostOrQuota(): Promise<number> {
     // Gemini 2.0 Flash free tier: 15 RPM, 1M TPM
-    return this.apiKey ? 6_000 : 0;
+    return 6_000;
   }
 }
+
+
+

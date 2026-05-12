@@ -4,6 +4,8 @@
 
 'use strict';
 
+const { redactDeep } = require('../utils/redact');
+
 // ── Severity ordering ─────────────────────────────────────────────────────────
 const SEV_ORDER = { critical: 0, high: 1, medium: 2, low: 3 };
 
@@ -191,7 +193,7 @@ function buildFindingCardHtml(finding, idx) {
  * scanResult can be any shape — we normalize defensively.
  */
 function buildHtmlReport(scanResult) {
-  const input      = (scanResult && typeof scanResult === 'object') ? scanResult : {};
+  const input      = redactDeep((scanResult && typeof scanResult === 'object') ? scanResult : {});
   const rawFindings = extractFindings(input);
   const findings   = sortFindings(deduplicateFindings(rawFindings));
 
@@ -352,7 +354,7 @@ function buildHtmlReport(scanResult) {
  * Returns a deterministic, pretty-printed JSON string with a clear schema.
  */
 function buildJsonReport(scanResult) {
-  const input      = (scanResult && typeof scanResult === 'object') ? scanResult : {};
+  const input      = redactDeep((scanResult && typeof scanResult === 'object') ? scanResult : {});
   const rawFindings = extractFindings(input);
   const findings   = sortFindings(deduplicateFindings(rawFindings));
 

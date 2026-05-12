@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { AuthConfig, ChecklistData, Finding, ScanHistoryEntry, ScanProgressEvent, ScanResult } from '../types';
+import { redactDeep } from '../utils/redact';
 
 const HISTORY_KEY  = 'sentinel_v2_history';
 const THEME_KEY    = 'sentinel_v2_theme';
@@ -219,8 +220,8 @@ export const useStore = create<AppState>((set, get) => ({
   urlScanIsLocal: false,
 
   getCombinedFindings: () => {
-    const { urlScanResult, projectScanResult, urlScanIsLocal } = get();
-    const urlFindings  = urlScanIsLocal ? (urlScanResult?.findings ?? []) : [];
+    const { urlScanResult, projectScanResult } = get();
+    const urlFindings  = urlScanResult?.findings ?? [];
     const projFindings = projectScanResult?.findings ?? [];
     return mergeFindings(urlFindings, projFindings);
   },
@@ -262,15 +263,16 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   saveToHistory: async (result) => {
-    const riskScore = calcRiskScore(result.findings);
+    const sanitizedResult = redactDeep(result);
+    const riskScore = calcRiskScore(sanitizedResult.findings);
     const entry: ScanHistoryEntry = {
       id:       Date.now().toString(),
       ts:       Date.now(),
-      mode:     result.mode,
-      target:   result.scannedUrl || result.target || '',
+      mode:     sanitizedResult.mode,
+      target:   sanitizedResult.scannedUrl || sanitizedResult.target || '',
       riskScore,
-      summary:  { total: result.metadata.summary.total, bySeverity: result.metadata.summary.bySeverity },
-      scanResult: result,
+      summary:  { total: sanitizedResult.metadata.summary.total, bySeverity: sanitizedResult.metadata.summary.bySeverity },
+      scanResult: sanitizedResult,
     };
     const updated = [entry, ...get().history].slice(0, MAX_HISTORY);
     set({ history: updated });

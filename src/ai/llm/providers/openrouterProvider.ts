@@ -3,7 +3,7 @@
  *
  * Gói miễn phí: https://openrouter.ai
  * Mô hình: meta-llama/llama-3.3-70b-instruct:free (chất lượng cao, miễn phí)
- * Biến môi trường: VITE_OPENROUTER_API_KEY
+ * Bien moi truong: OPENROUTER_API_KEY (doc trong Electron main process)
  *
  * FIX v2.1:
  *  - Đổi model mặc định: llama-3.1-8b-instruct:free → llama-3.3-70b-instruct:free
@@ -33,6 +33,7 @@ const FALLBACK_MODELS = [
 const DEFAULT_TIMEOUT = 20_000;
 
 type AiFetch = (payload: {
+  providerId: 'openrouter';
   url: string;
   method?: string;
   headers?: Record<string, string>;
@@ -64,7 +65,7 @@ async function fetchJson(
 ) {
   const aiFetch = getAiFetch();
   if (aiFetch) {
-    const resp = await aiFetch({ url, method: 'POST', headers: payload.headers, body: payload.body, timeoutMs });
+    const resp = await aiFetch({ providerId: 'openrouter', url, method: 'POST', headers: payload.headers, body: payload.body, timeoutMs });
     return { ok: resp.ok, status: resp.status, body: resp.body || '', contentType: extractContentType(resp.headers) };
   }
 
@@ -160,11 +161,10 @@ async function streamOpenAiCompletion(
 
 /** Đọc danh sách model từ VITE_OPENROUTER_MODELS hoặc dùng fallback mặc định */
 function resolveModelList(): string[] {
-  const env = (import.meta as unknown as Record<string, Record<string, string>>).env ?? {};
   // FIX: Hỗ trợ cả VITE_OPENROUTER_MODELS (mới) và VITE_OPENROUTER_MODEL (cũ)
-  const fromEnv = env.VITE_OPENROUTER_MODELS ?? env.VITE_OPENROUTER_MODEL ?? '';
+  const fromEnv = import.meta.env.VITE_OPENROUTER_MODELS ?? import.meta.env.VITE_OPENROUTER_MODEL ?? '';
   if (fromEnv.trim()) {
-    return fromEnv.split(',').map(m => m.trim()).filter(Boolean);
+    return fromEnv.split(',').map((m: string) => m.trim()).filter(Boolean);
   }
   return FALLBACK_MODELS;
 }
@@ -174,26 +174,20 @@ export class OpenRouterProvider implements LLMProvider {
   readonly label = 'OpenRouter (Llama-3.3 70B Free)';
   readonly supportsJsonMode = true;
 
-  private readonly apiKey: string;
   private readonly metrics: ProviderMetricsTracker;
   private readonly modelList: string[];
 
   constructor(metrics: ProviderMetricsTracker) {
-    const env = (import.meta as unknown as Record<string, Record<string, string>>).env ?? {};
-    this.apiKey = env.VITE_OPENROUTER_API_KEY ?? '';
     this.metrics = metrics;
     this.modelList = resolveModelList();
   }
 
   async generate(prompt: string, options: GenerateOptions = {}): Promise<string> {
-    if (!this.apiKey) throw new ProviderError('auth_error', this.id, 'VITE_OPENROUTER_API_KEY not set');
-
     const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT;
     const start = Date.now();
 
     const headers = {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${this.apiKey}`,
       'HTTP-Referer': 'https://sentinel.local',
       'X-Title': 'SENTINEL OWASP Assistant',
     };
@@ -213,7 +207,7 @@ export class OpenRouterProvider implements LLMProvider {
       };
 
       try {
-        const canStream = Boolean(options.onToken) && options.stream !== false && !getAiFetch();
+        const canStream = false;
         const res = canStream
           ? await streamOpenAiCompletion(OPENROUTER_API_URL, headers, body, timeoutMs, options.onToken!, options.signal)
           : await fetchJson(OPENROUTER_API_URL, { headers, body: JSON.stringify(body) }, timeoutMs, options.signal);
@@ -222,6 +216,10 @@ export class OpenRouterProvider implements LLMProvider {
         if (res.status === 429) {
           this.metrics.recordFailure(this.id, latency);
           throw new ProviderError('rate_limit', this.id, 'Rate limit exceeded', 429);
+        }
+        if (res.status === 401 || res.status === 403) {
+          this.metrics.recordFailure(this.id, latency);
+          throw new ProviderError('auth_error', this.id, 'OPENROUTER_API_KEY not set or rejected', res.status);
         }
 
         // FIX: 404 nghĩa là model không tồn tại → thử model tiếp theo
@@ -280,10 +278,13 @@ export class OpenRouterProvider implements LLMProvider {
   }
 
   async health(): Promise<ProviderHealth> {
-    return this.metrics.getHealth(this.id, !this.apiKey);
+    return this.metrics.getHealth(this.id, false);
   }
 
   async estimateCostOrQuota(): Promise<number> {
-    return this.apiKey ? 8_000 : 0;
+    return 8_000;
   }
 }
+
+
+

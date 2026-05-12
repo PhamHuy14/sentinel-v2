@@ -1,17 +1,17 @@
 /**
  * sentinelAI.ts — Tang goi LLM truc tiep (Direct LLM Caller)
  *
- * Day la tang du phong duoc goi khi LLMRouter (qua hybridOrchestrator) khong
- * kha dung, hoac khi can mot lenh goi don gian khong qua pipeline day du.
+ * Đây là tầng dự phòng được gọi khi LLMRouter (qua hybridOrchestrator) không
+ * khả dụng, hoặc khi cần một lệnh gọi đơn giản không qua pipeline đầy đủ.
  *
  * NANG CAP v2:
  *  - SYSTEM_PROMPT mo rong va chi tiet hon
- *  - scoreAnswer() cai tien: nhan biet cau tra loi ne tranh, thieu noi dung
- *  - buildPrompt(): them huong dan output structure
- *  - targetScore(): nguong chat luong thuc te hon
- *  - max_tokens tang len 2048 mac dinh
- *  - callOpenAiCompatible: them temperature 0.3 (nhinh hon mot chut de phong phu hon)
- *  - Model list cap nhat: uu tien model moi hon va mien phi hon
+ *  - scoreAnswer() cải tiến: nhận biết câu trả lời né tránh, thiếu nội dung
+ *  - buildPrompt(): thêm hướng dẫn output structure
+ *  - targetScore(): ngưỡng chất lượng thực tế hơn
+ *  - max_tokens tăng lên 2048 mặc định
+ *  - callOpenAiCompatible: thêm temperature 0.3 để câu trả lời phong phú hơn
+ *  - Model list cập nhật: ưu tiên model mới hơn và miễn phí hơn
  */
 
 import { HISTORY_TURNS } from '../aiRouter.js';
@@ -63,6 +63,15 @@ interface ProviderProfile {
   timeoutMs: number;
   openAiCompatible: boolean;
 }
+
+type AiFetch = (payload: {
+  providerId: ProviderId;
+  url: string;
+  method?: string;
+  headers?: Record<string, string>;
+  body?: string;
+  timeoutMs?: number;
+}) => Promise<{ ok: boolean; status: number; body: string; headers?: Record<string, string>; error?: string }>;
 
 interface CandidateAnswer {
   answer: string;
@@ -120,32 +129,47 @@ const DEFAULT_MODELS: Record<ProviderId, string[]> = {
 
 // NANG CAP: System prompt chi tiet hon, huong dan cu the hon
 const SYSTEM_PROMPT = [
-  'Ban la SENTINEL AI — chuyen gia bao mat web va OWASP cap cao, tich hop trong SENTINEL OWASP Security Workbench.',
+  'Bạn là SENTINEL AI — chuyên gia bảo mật web và OWASP cấp cao, tích hợp trong SENTINEL OWASP Security Workbench.',
   '',
   '**QUY TAC BAT BUOC:**',
-  '1. Luon tra loi bang tieng Viet chuyen nghiep, tu nhien (tru khi duoc yeu cau khac).',
-  '2. KHONG BAO GIO noi "Toi khong co du thong tin" hay "Cau hoi nay kha phuc tap" ma khong giai thich.',
-  '3. KHONG viet cau tra loi qua ngan (duoi 150 tu) voi cau hoi ky thuat.',
-  '4. Voi cau hoi ve lo hong: giai thich co che + vi du PoC minh hoa (khong phai exploit thuc te) + cach fix.',
-  '5. Voi cau hoi so sanh: dung bang hoac danh sach co cau truc ro rang.',
-  '6. Voi cau hoi "la gi": dinh nghia + vi du thuc te + tam quan trong.',
-  '7. Voi cau hoi "cach fix": liet ke tung buoc, kem code snippet neu phu hop.',
+  '1. Luôn trả lời bằng tiếng Việt chuyên nghiệp, tự nhiên (trừ khi được yêu cầu khác).',
+  '2. KHÔNG BAO GIỜ nói "Tôi không có đủ thông tin" hay "Câu hỏi này khá phức tạp" mà không giải thích.',
+  '3. KHÔNG viết câu trả lời quá ngắn (dưới 150 từ) với câu hỏi kỹ thuật.',
+  '4. Với câu hỏi về lỗ hổng: giải thích cơ chế + ví dụ PoC minh họa (không phải exploit thực tế) + cách fix.',
+  '5. Với câu hỏi so sánh: dùng bảng hoặc danh sách có cấu trúc rõ ràng.',
+  '6. Với câu hỏi "là gì": định nghĩa + ví dụ thực tế + tầm quan trọng.',
+  '7. Với câu hỏi "cách fix": liệt kê từng bước, kèm code snippet nếu phù hợp.',
   '',
   '**DINH DANG:**',
-  '- Dung Markdown: ## tieu de, **in dam**, `code`, danh sach -.',
-  '- Emoji vua phai: ⚠️ 🔴 ✅ 🛡️ de highlight y chinh.',
-  '- Code snippet: dung ```language ... ``` khi co vi du code.',
+  '- Dùng Markdown: ## tiêu đề, **in đậm**, `code`, danh sách -.',
+  '- Emoji vừa phải: ⚠️ 🔴 ✅ 🛡️ để highlight ý chính.',
+  '- Code snippet: dùng ```language ... ``` khi có ví dụ code.',
   '',
   '**GIOI HAN AN TOAN:**',
-  '- KHONG cung cap payload exploit co the chay ngay de tan cong thuc te.',
-  '- Chi dung PoC minh hoa ngan gon de giao duc phong thu.',
+  '- KHÔNG cung cấp payload exploit có thể chạy ngay để tấn công thực tế.',
+  '- Chỉ dùng PoC minh họa ngắn gọn để giáo dục phòng thủ.',
 ].join('\n');
 
 
 
 function readEnv(name: string): string {
-  const env = (import.meta as unknown as { env?: Record<string, string> }).env ?? {};
-  return (env[name] ?? '').trim();
+  switch (name) {
+    case 'VITE_LLM_HISTORY_TURNS': return (import.meta.env.VITE_LLM_HISTORY_TURNS ?? '').trim();
+    case 'VITE_GROQ_MODELS': return (import.meta.env.VITE_GROQ_MODELS ?? '').trim();
+    case 'VITE_GEMINI_MODELS': return (import.meta.env.VITE_GEMINI_MODELS ?? '').trim();
+    case 'VITE_OPENROUTER_MODELS': return (import.meta.env.VITE_OPENROUTER_MODELS ?? '').trim();
+    case 'VITE_TOGETHER_MODELS': return (import.meta.env.VITE_TOGETHER_MODELS ?? '').trim();
+    case 'VITE_HF_MODELS': return (import.meta.env.VITE_HF_MODELS ?? '').trim();
+    default: return '';
+  }
+}
+
+function getAiFetch(): AiFetch | null {
+  return (globalThis as { owaspWorkbench?: { aiFetch?: AiFetch } }).owaspWorkbench?.aiFetch ?? null;
+}
+
+function isProviderAvailable(provider: ProviderProfile): boolean {
+  return Boolean(getAiFetch() || readEnv(provider.apiKeyEnv));
 }
 
 function splitCsv(raw: string, fallback: string[]): string[] {
@@ -160,7 +184,7 @@ function createProviderProfiles(): ProviderProfile[] {
   return [
     {
       id: 'groq',
-      apiKeyEnv: 'VITE_GROQ_API_KEY',
+      apiKeyEnv: 'GROQ_API_KEY',
       models: splitCsv(readEnv('VITE_GROQ_MODELS'), DEFAULT_MODELS.groq),
       endpoint: 'https://api.groq.com/openai/v1/chat/completions',
       timeoutMs: Number(readEnv('VITE_GROQ_TIMEOUT_MS') || '15000'),
@@ -168,7 +192,7 @@ function createProviderProfiles(): ProviderProfile[] {
     },
     {
       id: 'gemini',
-      apiKeyEnv: 'VITE_GEMINI_API_KEY',
+      apiKeyEnv: 'GEMINI_API_KEY',
       models: splitCsv(readEnv('VITE_GEMINI_MODELS'), DEFAULT_MODELS.gemini),
       endpoint: 'https://generativelanguage.googleapis.com/v1beta/models',
       timeoutMs: Number(readEnv('VITE_GEMINI_TIMEOUT_MS') || '20000'),
@@ -176,7 +200,7 @@ function createProviderProfiles(): ProviderProfile[] {
     },
     {
       id: 'openrouter',
-      apiKeyEnv: 'VITE_OPENROUTER_API_KEY',
+      apiKeyEnv: 'OPENROUTER_API_KEY',
       models: splitCsv(readEnv('VITE_OPENROUTER_MODELS'), DEFAULT_MODELS.openrouter),
       endpoint: 'https://openrouter.ai/api/v1/chat/completions',
       timeoutMs: Number(readEnv('VITE_OPENROUTER_TIMEOUT_MS') || '20000'),
@@ -184,7 +208,7 @@ function createProviderProfiles(): ProviderProfile[] {
     },
     {
       id: 'together',
-      apiKeyEnv: 'VITE_TOGETHER_API_KEY',
+      apiKeyEnv: 'TOGETHER_API_KEY',
       models: splitCsv(readEnv('VITE_TOGETHER_MODELS'), DEFAULT_MODELS.together),
       endpoint: 'https://api.together.xyz/v1/chat/completions',
       timeoutMs: Number(readEnv('VITE_TOGETHER_TIMEOUT_MS') || '20000'),
@@ -192,7 +216,7 @@ function createProviderProfiles(): ProviderProfile[] {
     },
     {
       id: 'huggingface',
-      apiKeyEnv: 'VITE_HF_API_KEY',
+      apiKeyEnv: 'HF_API_KEY',
       models: splitCsv(readEnv('VITE_HF_MODELS'), DEFAULT_MODELS.huggingface),
       endpoint: 'https://router.huggingface.co/novita/v3/openai/chat/completions',
       timeoutMs: Number(readEnv('VITE_HF_TIMEOUT_MS') || '30000'),
@@ -234,40 +258,40 @@ function buildPrompt(payload: SentinelAskPayload): string {
 
   // Huong dan output theo loai cau hoi
   const qLower = q.toLowerCase();
-  const instructions = ['Huong dan tra loi:'];
+  const instructions = ['Hướng dẫn trả lời:'];
 
   if (qLower.includes('tai sao') || qLower.includes('why') || qLower.includes('co che')) {
     instructions.push(
-      '- Giai thich NGUYEN NHAN va CO CHE ky thuat.',
-      '- Bao gom vi du minh hoa thuc te.',
-      '- Neu ro tac dong va hau qua.',
+      '- Giải thích NGUYÊN NHÂN và CƠ CHẾ kỹ thuật.',
+      '- Bao gồm ví dụ minh họa thực tế.',
+      '- Nêu rõ tác động và hậu quả.',
     );
   } else if (qLower.includes('so sanh') || qLower.includes('compare') || qLower.includes('khac nhau')) {
     instructions.push(
-      '- Tao bang so sanh hoac danh sach ro rang.',
-      '- Neu diem giong nhau va khac nhau cu the.',
-      '- Cho vi du khi nao dung cai nao.',
+      '- Tạo bảng so sánh hoặc danh sách rõ ràng.',
+      '- Nêu điểm giống nhau và khác nhau cụ thể.',
+      '- Cho ví dụ khi nào dùng cái nào.',
     );
   } else if (qLower.includes('fix') || qLower.includes('khac phuc') || qLower.includes('phong')) {
     instructions.push(
-      '- Liet ke cac buoc fix theo thu tu uu tien.',
-      '- Kem code snippet minh hoa neu phu hop.',
-      '- De cap ca server-side va client-side neu lien quan.',
+      '- Liệt kê các bước fix theo thứ tự ưu tiên.',
+      '- Kèm code snippet minh họa nếu phù hợp.',
+      '- Đề cập cả server-side và client-side nếu liên quan.',
     );
   } else if (qLower.includes('la gi') || qLower.includes('what is') || qLower.includes('dinh nghia')) {
     instructions.push(
-      '- Dinh nghia ro rang, suc tich.',
-      '- Vi du tan cong thuc te minh hoa.',
-      '- Cach phat hien va phong chong.',
+      '- Định nghĩa rõ ràng, súc tích.',
+      '- Ví dụ tấn công thực tế minh họa.',
+      '- Cách phát hiện và phòng chống.',
     );
   } else {
     instructions.push(
-      '- Tra loi day du, chi tiet, co cau truc.',
-      '- Khong ket thuc cau tra loi dot ngot.',
+      '- Trả lời đầy đủ, chi tiết, có cấu trúc.',
+      '- Không kết thúc câu trả lời đột ngột.',
     );
   }
 
-  instructions.push('- KHONG tra loi chung chung; phai co thong tin ky thuat cu the.');
+  instructions.push('- KHÔNG trả lời chung chung; phải có thông tin kỹ thuật cụ thể.');
   sections.push(instructions.join('\n'));
 
   return sections.join('\n\n');
@@ -280,7 +304,7 @@ function isUnsafeOffensiveRequest(question: string): boolean {
     'sqlmap command',
     'drop database',
     'hack website',
-    'chi tiet tan cong',
+    'chi tiết tấn công',
     'executable exploit',
     'metasploit module',
     'create malware',
@@ -291,16 +315,16 @@ function isUnsafeOffensiveRequest(question: string): boolean {
 
 function offensiveRefusal(): SentinelAnswer {
   const configuredProviderCount = createProviderProfiles()
-    .filter(provider => Boolean(readEnv(provider.apiKeyEnv)))
+    .filter(isProviderAvailable)
     .length;
 
   return {
     answer:
-      '🛡️ Minh khong the ho tro huong dan tan cong hoac cung cap payload khai thac thuc te.\n\n' +
-      'Neu ban muon, minh co the giup theo huong **phong thu**:\n' +
-      '- Cach phat hien lo hong trong code\n' +
-      '- Harden cau hinh server/ung dung\n' +
-      '- Checklist bao mat OWASP\n' +
+      '🛡️ Mình không thể hỗ trợ hướng dẫn tấn công hoặc cung cấp payload khai thác thực tế.\n\n' +
+      'Nếu bạn muốn, mình có thể giúp theo hướng **phòng thủ**:\n' +
+      '- Cách phát hiện lỗ hổng trong code\n' +
+      '- Harden cấu hình server/ứng dụng\n' +
+      '- Checklist bảo mật OWASP\n' +
       '- Review security best practices',
     confidence: 0.98,
     providerUsed: 'policy',
@@ -331,12 +355,15 @@ function scoreAnswer(question: string, answer: string): number {
 
   // Phat hien cau tra loi ne tranh -> diem rat thap
   const evasiveMarkers = [
+    'tôi không có đủ thông tin',
+    'câu hỏi này khá phức tạp',
     'toi khong co du thong tin',
     'cau hoi nay kha phuc tap',
     'i am an ai language model',
     'i cannot provide information',
     'as an ai, i',
     'i don\'t have',
+    'không thể cung cấp thông tin',
     'khong the cung cap thong tin',
   ];
   if (evasiveMarkers.some(m => text.includes(m)) && len < 400) {
@@ -449,6 +476,7 @@ async function callOpenAiCompatible(
   model: string,
   userPrompt: string,
 ): Promise<string> {
+  const aiFetch = getAiFetch();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), provider.timeoutMs);
 
@@ -464,18 +492,32 @@ async function callOpenAiCompatible(
   };
 
   try {
-    const response = await fetch(provider.endpoint, {
-      method: 'POST',
-      headers: buildHeaders(provider, apiKey),
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      throw new Error(`${provider.id}:${model} HTTP ${response.status}`);
+    let data: OpenAiLikeResponse;
+    if (aiFetch) {
+      const response = await aiFetch({
+        providerId: provider.id,
+        url: provider.endpoint,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        timeoutMs: provider.timeoutMs,
+      });
+      if (!response.ok) {
+        throw new Error(`${provider.id}:${model} HTTP ${response.status}`);
+      }
+      data = JSON.parse(response.body || '{}') as OpenAiLikeResponse;
+    } else {
+      const response = await fetch(provider.endpoint, {
+        method: 'POST',
+        headers: buildHeaders(provider, apiKey),
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        throw new Error(`${provider.id}:${model} HTTP ${response.status}`);
+      }
+      data = await response.json() as OpenAiLikeResponse;
     }
-
-    const data = await response.json() as OpenAiLikeResponse;
     return normalizeWhitespace(extractOpenAiContent(data));
   } finally {
     clearTimeout(timer);
@@ -497,36 +539,63 @@ async function callGemini(
   model: string,
   userPrompt: string,
 ): Promise<string> {
+  const aiFetch = getAiFetch();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), provider.timeoutMs);
-  const url = `${provider.endpoint}/${model}:generateContent?key=${apiKey}`;
+  const url = aiFetch
+    ? `${provider.endpoint}/${model}:generateContent`
+    : `${provider.endpoint}/${model}:generateContent?key=${apiKey}`;
+  const body = JSON.stringify({
+    system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+    contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+    generationConfig: {
+      temperature: 0.3,
+      maxOutputTokens: Number(readEnv('VITE_LLM_MAX_OUTPUT_TOKENS') || '2048'),
+    },
+  });
 
   try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-        contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-        generationConfig: {
-          temperature: 0.3,
-          maxOutputTokens: Number(readEnv('VITE_LLM_MAX_OUTPUT_TOKENS') || '2048'),
-        },
-      }),
-      signal: controller.signal,
-    });
+    let data: GeminiApiResponse;
+    if (aiFetch) {
+      const response = await aiFetch({
+        providerId: provider.id,
+        url,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        timeoutMs: provider.timeoutMs,
+      });
 
-    if (!response.ok) {
-      const errText = await response.text().catch(() => '');
-      let detail = `HTTP ${response.status}`;
-      try {
-        const parsed = JSON.parse(errText) as GeminiApiResponse;
-        if (parsed?.error?.message) detail = `HTTP ${response.status}: ${parsed.error.message}`;
-      } catch { /* ignore */ }
-      throw new Error(`gemini:${model} ${detail}`);
+      if (!response.ok) {
+        const errText = response.body;
+        let detail = `HTTP ${response.status}`;
+        try {
+          const parsed = JSON.parse(errText) as GeminiApiResponse;
+          if (parsed?.error?.message) detail = `HTTP ${response.status}: ${parsed.error.message}`;
+        } catch { /* ignore */ }
+        throw new Error(`gemini:${model} ${detail}`);
+      }
+      data = JSON.parse(response.body || '{}') as GeminiApiResponse;
+    } else {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const errText = await response.text().catch(() => '');
+        let detail = `HTTP ${response.status}`;
+        try {
+          const parsed = JSON.parse(errText) as GeminiApiResponse;
+          if (parsed?.error?.message) detail = `HTTP ${response.status}: ${parsed.error.message}`;
+        } catch { /* ignore */ }
+        throw new Error(`gemini:${model} ${detail}`);
+      }
+      data = await response.json() as GeminiApiResponse;
     }
 
-    const data = await response.json() as GeminiApiResponse;
     const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
     return normalizeWhitespace(text);
   } finally {
@@ -549,19 +618,19 @@ async function callProviderModel(
 
 function fallbackAnswer(warnings: string[], latencyMs: number, tried: string[] = []): SentinelAnswer {
   const configuredProviderCount = createProviderProfiles()
-    .filter(provider => Boolean(readEnv(provider.apiKeyEnv)))
+    .filter(isProviderAvailable)
     .length;
 
   return {
     answer:
-      '⚠️ **Cac API AI hien khong kha dung hoac het quota.**\n\n' +
-      'Ban van co the su dung knowledge base offline de hoi ve OWASP Top 10 va bao mat web co ban.\n\n' +
-      '**De kich hoat AI day du**, hay kiem tra API key trong file `.env`:\n' +
-      '- `VITE_GROQ_API_KEY` — Groq (nhanh nhat, mien phi tai console.groq.com)\n' +
-      '- `VITE_GEMINI_API_KEY` — Google Gemini (aistudio.google.com)\n' +
-      '- `VITE_OPENROUTER_API_KEY` — OpenRouter (openrouter.ai)\n' +
-      '- `VITE_TOGETHER_API_KEY` — Together AI\n' +
-      '- `VITE_HF_API_KEY` — HuggingFace',
+      '⚠️ **Các API AI hiện không khả dụng hoặc hết quota.**\n\n' +
+      'Bạn vẫn có thể sử dụng knowledge base offline để hỏi về OWASP Top 10 và bảo mật web cơ bản.\n\n' +
+      '**Để kích hoạt AI đầy đủ**, hãy kiểm tra API key trong file `.env`:\n' +
+      '- `GROQ_API_KEY` - Groq (nhanh nhất, miễn phí tại console.groq.com)\n' +
+      '- `GEMINI_API_KEY` - Google Gemini (aistudio.google.com)\n' +
+      '- `OPENROUTER_API_KEY` - OpenRouter (openrouter.ai)\n' +
+      '- `TOGETHER_API_KEY` - Together AI\n' +
+      '- `HF_API_KEY` - HuggingFace',
     confidence: 0.20,
     providerUsed: 'fallback',
     modelUsed: 'fallback',
@@ -583,13 +652,13 @@ export async function askSentinelAI(payload: SentinelAskPayload): Promise<Sentin
   const question = payload.question.trim();
   const providerProfiles = createProviderProfiles();
   const configuredProviderCount = providerProfiles
-    .filter(provider => Boolean(readEnv(provider.apiKeyEnv)))
+    .filter(isProviderAvailable)
     .length;
 
   if (!question) {
     const latencyMs = Date.now() - start;
     return {
-      answer: 'Ban hay nhap cau hoi cu the hon de minh ho tro chinh xac nhe.',
+    answer: 'Bạn hãy nhập câu hỏi cụ thể hơn để mình hỗ trợ chính xác nhé.',
       confidence: 0.20,
       providerUsed: 'validation',
       modelUsed: 'validation',
@@ -639,7 +708,7 @@ export async function askSentinelAI(payload: SentinelAskPayload): Promise<Sentin
     if (!provider) continue;
 
     const apiKey = readEnv(provider.apiKeyEnv);
-    if (!apiKey) {
+    if (!apiKey && !getAiFetch()) {
       warnings.push(`${provider.id} skipped (missing ${provider.apiKeyEnv})`);
       continue;
     }

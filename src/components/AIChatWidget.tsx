@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import DOMPurify from 'dompurify';
 import { AIChatMessage, AiQueryPayload, genMsgId, HISTORY_TURNS, INPUT_PLACEHOLDER_HINTS, routeQuery } from '../ai/aiRouter';
 import { getOrchestrator } from '../ai/llm/hybridOrchestrator.js';
 import { useAIStore } from '../store/useAIStore';
@@ -113,7 +114,10 @@ function renderMd(raw: string): string {
   }
 
   flushList();
-  return out.join('');
+  return DOMPurify.sanitize(out.join(''), {
+    ALLOWED_TAGS: ['p', 'strong', 'em', 'code', 'pre', 'ul', 'ol', 'li', 'table', 'tr', 'th', 'td', 'hr', 'div'],
+    ALLOWED_ATTR: ['class'],
+  });
 }
 
 // ── Câu hỏi gợi ý nhanh (bổ sung thêm nhiều chủ đề) ──────────────────────────
@@ -276,14 +280,7 @@ function copyText(text: string) {
 }
 
 function hasConfiguredLlmProvider(): boolean {
-  const env = (import.meta as unknown as { env?: Record<string, string> }).env ?? {};
-  return Boolean(
-    env.VITE_OPENROUTER_API_KEY ||
-    env.VITE_GEMINI_API_KEY ||
-    env.VITE_GROQ_API_KEY ||
-    env.VITE_TOGETHER_API_KEY ||
-    env.VITE_HF_API_KEY
-  );
+  return Boolean((globalThis as { owaspWorkbench?: unknown }).owaspWorkbench);
 }
 
 interface ResolvedAssistantAnswer {

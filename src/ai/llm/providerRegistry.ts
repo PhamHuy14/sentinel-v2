@@ -26,33 +26,31 @@ import { DEFAULT_ROUTER_CONFIG, RouterConfig } from './types';
 
 /** Doc cac cau hinh ghi de (tuy chon) tu bien moi truong Vite */
 function readEnvConfig(): Partial<RouterConfig> {
-  const env = (import.meta as unknown as Record<string, Record<string, string>>).env ?? {};
-
   const cfg: Partial<RouterConfig> = {};
 
-  if (env.VITE_LLM_PROVIDER_PRIORITY) {
-    cfg.providerPriority = env.VITE_LLM_PROVIDER_PRIORITY.split(',').map(s => s.trim());
+  if (import.meta.env.VITE_LLM_PROVIDER_PRIORITY) {
+    cfg.providerPriority = import.meta.env.VITE_LLM_PROVIDER_PRIORITY.split(',').map((s: string) => s.trim());
   }
-  if (env.VITE_LLM_TIMEOUT_MS) {
-    cfg.timeoutMs = Number(env.VITE_LLM_TIMEOUT_MS);
+  if (import.meta.env.VITE_LLM_TIMEOUT_MS) {
+    cfg.timeoutMs = Number(import.meta.env.VITE_LLM_TIMEOUT_MS);
   }
-  if (env.VITE_LLM_MAX_RETRIES) {
-    cfg.maxRetries = Number(env.VITE_LLM_MAX_RETRIES);
+  if (import.meta.env.VITE_LLM_MAX_RETRIES) {
+    cfg.maxRetries = Number(import.meta.env.VITE_LLM_MAX_RETRIES);
   }
-  if (env.VITE_LLM_CACHE_TTL_MS) {
-    cfg.cacheTtlMs = Number(env.VITE_LLM_CACHE_TTL_MS);
+  if (import.meta.env.VITE_LLM_CACHE_TTL_MS) {
+    cfg.cacheTtlMs = Number(import.meta.env.VITE_LLM_CACHE_TTL_MS);
   }
-  if (env.VITE_LLM_CROSS_CHECK_ENABLED !== undefined) {
-    cfg.crossCheckEnabled = env.VITE_LLM_CROSS_CHECK_ENABLED !== 'false';
+  if (import.meta.env.VITE_LLM_CROSS_CHECK_ENABLED !== undefined) {
+    cfg.crossCheckEnabled = import.meta.env.VITE_LLM_CROSS_CHECK_ENABLED !== 'false';
   }
-  if (env.VITE_LLM_CROSS_CHECK_THRESHOLD) {
-    cfg.crossCheckThreshold = Number(env.VITE_LLM_CROSS_CHECK_THRESHOLD);
+  if (import.meta.env.VITE_LLM_CROSS_CHECK_THRESHOLD) {
+    cfg.crossCheckThreshold = Number(import.meta.env.VITE_LLM_CROSS_CHECK_THRESHOLD);
   }
-  if (env.VITE_LLM_MAX_INPUT_TOKENS) {
-    cfg.maxInputTokens = Number(env.VITE_LLM_MAX_INPUT_TOKENS);
+  if (import.meta.env.VITE_LLM_MAX_INPUT_TOKENS) {
+    cfg.maxInputTokens = Number(import.meta.env.VITE_LLM_MAX_INPUT_TOKENS);
   }
-  if (env.VITE_LLM_MAX_OUTPUT_TOKENS) {
-    cfg.maxOutputTokens = Number(env.VITE_LLM_MAX_OUTPUT_TOKENS);
+  if (import.meta.env.VITE_LLM_MAX_OUTPUT_TOKENS) {
+    cfg.maxOutputTokens = Number(import.meta.env.VITE_LLM_MAX_OUTPUT_TOKENS);
   }
 
   return cfg;
@@ -81,3 +79,4 @@ export function buildLLMRouter(): LLMRouter {
 
   return new LLMRouter(providers, metrics, config);
 }
+
