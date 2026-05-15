@@ -5,6 +5,7 @@ import { getOrchestrator } from '../ai/llm/hybridOrchestrator.js';
 import { useAIStore } from '../store/useAIStore';
 import { useStore } from '../store/useStore';
 import { formatOwaspCategory } from '../utils/owasp';
+import { buildRemediationPlan, formatRemediationPlanForPrompt } from '../utils/remediationPlan';
 
 // Mở rộng AIChatMessage để mang theo thông tin debug provider
 interface ExtendedAIChatMessage extends AIChatMessage {
@@ -279,8 +280,19 @@ function copyText(text: string) {
   });
 }
 
-function hasConfiguredLlmProvider(): boolean {
-  return Boolean((globalThis as { owaspWorkbench?: unknown }).owaspWorkbench);
+async function hasConfiguredLlmProvider(): Promise<boolean> {
+  const bridge = (globalThis as {
+    owaspWorkbench?: {
+      getAIProviders?: () => Promise<Record<string, { configured: boolean }>>;
+    };
+  }).owaspWorkbench;
+  if (!bridge?.getAIProviders) return false;
+  try {
+    const providers = await bridge.getAIProviders();
+    return Object.values(providers).some(provider => provider.configured);
+  } catch {
+    return false;
+  }
 }
 
 interface ResolvedAssistantAnswer {
@@ -303,7 +315,7 @@ async function resolveAssistantAnswer(payload: AiQueryPayload): Promise<Resolved
       confidence: response.confidence,
       warnings: response.warnings,
     });
-    const llmStatus = hasConfiguredLlmProvider() ? 'online' : 'offline';
+    const llmStatus = await hasConfiguredLlmProvider() ? 'online' : 'offline';
     return {
       answer: response.answer,
       llmStatus,
@@ -349,7 +361,7 @@ export function AIChatWidget() {
   const [inputFocused, setInputFocused]       = useState(false);
   const [showFirstOpenTip, setShowFirstOpenTip] = useState(false);
   const [copiedMsgId, setCopiedMsgId]         = useState<string | null>(null);
-  const [, setLlmStatus]                      = useState<'online' | 'offline'>(hasConfiguredLlmProvider() ? 'online' : 'offline');
+  const [, setLlmStatus]                      = useState<'online' | 'offline'>('offline');
   const [expandedDebugId, setExpandedDebugId] = useState<string | null>(null);
   // Từ khóa tìm kiếm trong panel gợi ý
   const [suggestionSearch, setSuggestionSearch] = useState('');
@@ -383,6 +395,14 @@ export function AIChatWidget() {
     messagesRef.current = messages;
   }, [messages]);
 
+  useEffect(() => {
+    let alive = true;
+    void hasConfiguredLlmProvider().then(configured => {
+      if (alive) setLlmStatus(configured ? 'online' : 'offline');
+    });
+    return () => { alive = false; };
+  }, []);
+
   // Focus ô nhập và xóa badge chưa đọc
   useEffect(() => {
     if (isOpen) { setUnread(0); setTimeout(() => inputRef.current?.focus(), 150); }
@@ -403,7 +423,7 @@ export function AIChatWidget() {
   const ensureWelcome = useCallback(() => {
     if (initializedRef.current) return;
     initializedRef.current = true;
-    const welcomeContent = `Xin chào! Tôi là **SENTINEL AI Assistant** — trợ lý bảo mật chạy hoàn toàn offline.\n\nTôi được xây dựng trên bộ kiến thức OWASP Top 10 và có thể giúp bạn:\n\n- Giải thích chi tiết các lỗ hổng bảo mật (XSS, SQL Injection, CSRF, IDOR, SSTI, SSRF...)\n- Hướng dẫn từng bước cách sử dụng SENTINEL\n- Phân tích và đề xuất cách khắc phục từng finding cụ thể\n- Giải thích các khái niệm OWASP A01–A10\n\nNhấn vào bất kỳ finding nào và chọn **"Hỏi AI"** để nhận phân tích tường tận, hoặc gõ câu hỏi bên dưới.`;
+    const welcomeContent = `Xin chào! Tôi là **SENTINEL AI Assistant** — trợ lý bảo mật dựa trên knowledge base OWASP cục bộ và có thể mở rộng bằng LLM khi bạn cấu hình API key.\n\nTôi được xây dựng để giúp bạn:\n\n- Giải thích chi tiết các lỗ hổng bảo mật (XSS, SQL Injection, CSRF, IDOR, SSTI, SSRF...)\n- Hướng dẫn từng bước cách sử dụng SENTINEL\n- Phân tích và đề xuất cách khắc phục từng finding cụ thể\n- Giải thích các khái niệm OWASP A01–A10\n\nNhấn vào bất kỳ finding nào và chọn **"Hỏi AI"** để nhận phân tích tường tận, hoặc gõ câu hỏi bên dưới.`;
     const welcome: AIChatMessage = {
       id: genMsgId(), role: 'assistant', content: welcomeContent, ts: Date.now(),
     };
@@ -519,13 +539,21 @@ export function AIChatWidget() {
     clearAIPendingFinding();
 
     const question = `Giải thích finding: ${pendingFinding.title} (${pendingFinding.ruleId})`;
+    const remediationPlan = pendingFinding.remediationPlan || buildRemediationPlan(pendingFinding);
     const findingCtx = {
       ruleId: pendingFinding.ruleId,
       title: pendingFinding.title,
       severity: pendingFinding.severity,
+      confidence: pendingFinding.confidence,
       owaspCategory: pendingFinding.owaspCategory,
+      target: pendingFinding.target,
+      location: pendingFinding.location,
       remediation: pendingFinding.remediation,
+      remediationPlan,
+      remediationPlanText: formatRemediationPlanForPrompt({ ...pendingFinding, remediationPlan }),
       evidence: pendingFinding.evidence,
+      references: pendingFinding.references,
+      collector: pendingFinding.collector,
     };
 
     const userMsg: AIChatMessage = {
@@ -535,6 +563,14 @@ export function AIChatWidget() {
         title: pendingFinding.title,
         severity: pendingFinding.severity,
         owaspCategory: pendingFinding.owaspCategory,
+        confidence: pendingFinding.confidence,
+        target: pendingFinding.target,
+        location: pendingFinding.location,
+        evidence: pendingFinding.evidence,
+        remediation: pendingFinding.remediation,
+        remediationPlan,
+        references: pendingFinding.references,
+        collector: pendingFinding.collector,
       },
     };
 
@@ -685,7 +721,7 @@ export function AIChatWidget() {
   const handleClear  = () => {
     handleStop();
     requestSeqRef.current += 1;
-    setLlmStatus(hasConfiguredLlmProvider() ? 'online' : 'offline');
+    void hasConfiguredLlmProvider().then(configured => setLlmStatus(configured ? 'online' : 'offline'));
     initializedRef.current = false;
     conversationHistoryRef.current = [];
     messagesRef.current = [];
@@ -781,7 +817,7 @@ export function AIChatWidget() {
                 <div className="ai-panel-name">Trợ lý bảo mật</div>
                 <div className="ai-panel-sub">
                   <span className="ai-online-dot" />
-                  <span>Offline · Cơ sở tri thức OWASP</span>
+                  <span>KB cục bộ · LLM khi có API key</span>
                   {totalFindings > 0 && (
                     <span className="ai-findings-badge">{totalFindings} kết quả</span>
                   )}

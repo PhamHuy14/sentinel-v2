@@ -9,6 +9,7 @@ function normalizeFinding(partial = {}) {
     location: partial.location || '',
     evidence: Array.isArray(partial.evidence) ? partial.evidence : [String(partial.evidence || '')].filter(Boolean),
     remediation: partial.remediation || '',
+    remediationPlan: partial.remediationPlan && typeof partial.remediationPlan === 'object' ? partial.remediationPlan : null,
     references: Array.isArray(partial.references) ? partial.references : [partial.references].filter(Boolean),
     collector: partial.collector || 'không rõ'
   };

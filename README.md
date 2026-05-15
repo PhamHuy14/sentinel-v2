@@ -4,7 +4,7 @@ SENTINEL v2 is an Electron + React desktop app for OWASP-focused security scanni
 
 ## Requirements
 
-- Node.js `20.x`
+- Node.js `22.19.0` or newer
 - npm `10.x`
 - Windows is the primary packaging target
 

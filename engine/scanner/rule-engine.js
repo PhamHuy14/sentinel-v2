@@ -34,6 +34,7 @@ const { runAllA10Rules } = require('../rules/a10');
 
 // ── Generic ──────────────────────────────────────────────────────────────────
 const { runGenericProjectChecks } = require('../rules/generic/generic-project-checks');
+const { enrichSourceFindings } = require('../utils/source-finding-enricher');
 
 function deduplicateFindings(findings) {
   const seen = new Set();
@@ -76,7 +77,7 @@ function runProjectRules(context) {
     ...runVulnerableAppSourceRules(context),
     ...runGenericProjectChecks(context),
   ];
-  return deduplicateFindings(findings);
+  return deduplicateFindings(enrichSourceFindings(findings, context.codeFiles));
 }
 
 module.exports = { runUrlRules, runProjectRules };

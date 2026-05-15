@@ -22,8 +22,25 @@ export interface Finding {
   location: string;
   evidence: string[];
   remediation: string;
+  remediationPlan?: RemediationPlan;
   references: string[];
   collector: 'blackbox' | 'source' | 'active-fuzzer';
+}
+
+export interface RemediationPlan {
+  summary: string;
+  confidenceNote: string;
+  filePath?: string;
+  lineStart?: number;
+  lineEnd?: number;
+  url?: string;
+  locationHint: string;
+  steps: string[];
+  suggestedChange?: {
+    from?: string;
+    to: string;
+    language?: string;
+  };
 }
 
 export interface AttackSurfaceRoute {

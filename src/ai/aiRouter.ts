@@ -28,6 +28,14 @@ export interface AIChatMessage {
     title: string;
     severity: string;
     owaspCategory: string;
+    confidence?: string;
+    target?: string;
+    location?: string;
+    evidence?: string[];
+    remediation?: string;
+    remediationPlan?: unknown;
+    references?: string[];
+    collector?: string;
   };
 }
 
@@ -381,9 +389,11 @@ const OWASP_QUICK: Record<string, string> = {
 };
 
 // ── Trả lời riêng cho từng loại Finding (Finding-specific answers) ──────────────────────────────────────────────────
-interface FindingContext {
+export interface FindingContext {
   ruleId?: string; title?: string; severity?: string;
-  owaspCategory?: string; remediation?: string; evidence?: string[];
+  confidence?: string; owaspCategory?: string; target?: string;
+  location?: string; remediation?: string; evidence?: string[];
+  remediationPlan?: unknown; references?: string[]; collector?: string;
 }
 
 function buildFindingAnswer(finding: FindingContext): string {
@@ -667,6 +677,10 @@ export function routeQuery(payload: AiQueryPayload): string {
       else if (normQ.includes('collector')) directFaqId = 'faq_collector';
       else if (normQ.includes('risk score')) directFaqId = 'faq_risk_score';
       else if (normQ.includes('severity') || /\b(critical|high|medium|low)\b/.test(normQ)) directFaqId = 'faq_severity';
+    }
+
+    if (topic === 'sentinel' && (intent === 'how_to_use' || normQ.includes('cach su dung') || normQ.includes('cach dung'))) {
+      directFaqId = 'faq_how_to_use';
     }
 
     // - Biến thể chủ đề `auth` bao gồm các từ khóa 2fa/mfa, nhưng TOPIC_TO_FAQ ánh xạ nó tới faq_auth.

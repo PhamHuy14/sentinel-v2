@@ -3,6 +3,7 @@ import { useAIStore } from '../store/useAIStore';
 import { useStore } from '../store/useStore';
 import { Finding } from '../types';
 import { formatOwaspCategory } from '../utils/owasp';
+import { buildRemediationPlan } from '../utils/remediationPlan';
 import { ReportExportButton } from './ReportExportButton';
 import { RiskDashboard } from './RiskDashboard';
 
@@ -182,6 +183,61 @@ const STATUS_VI: Record<FindingStatus, string> = {
   mitigated: 'Đã khắc phục',
 };
 
+type CodeSnippetLine = { line: string; code: string; active: boolean };
+
+function parseEvidenceSnippet(evidence: string): CodeSnippetLine[] | null {
+  if (!/(?:Doan code lien quan|Đoạn code liên quan):/i.test(evidence)) return null;
+  const rawLines = evidence.split('\n').slice(1);
+  const rows = rawLines
+    .map((line) => {
+      const match = line.match(/^([ >])\s*(\d+)\s\|\s?(.*)$/);
+      if (!match) return null;
+      return {
+        active: match[1] === '>',
+        line: match[2],
+        code: match[3] || ' ',
+      };
+    })
+    .filter((row): row is CodeSnippetLine => Boolean(row));
+  return rows.length ? rows : null;
+}
+
+function renderEvidence(evidence: string, index: number): React.ReactNode {
+  const snippet = parseEvidenceSnippet(evidence);
+  if (snippet) {
+    const activeLine = snippet.find((line) => line.active)?.line;
+    return (
+      <div key={index} className="detail-code-snippet">
+        <div className="code-snippet-head">
+          <span>Đoạn code liên quan</span>
+          {activeLine && <strong>Dòng lỗi: {activeLine}</strong>}
+        </div>
+        <pre className="code-snippet-body">
+          {snippet.map((row) => (
+            <span key={`${row.line}-${row.code}`} className={`code-snippet-row${row.active ? ' is-active' : ''}`}>
+              <span className="code-snippet-marker">{row.active ? '!' : ''}</span>
+              <span className="code-snippet-line">{row.line}</span>
+              <span className="code-snippet-code">{row.code}</span>
+            </span>
+          ))}
+        </pre>
+      </div>
+    );
+  }
+
+  const lineMatch = evidence.match(/Dong nghi van:\s*(\d+)/i) || evidence.match(/Dòng nghi vấn:\s*(\d+)/i);
+  if (lineMatch) {
+    return (
+      <div key={index} className="detail-line-callout">
+        <span>Dòng cần kiểm tra</span>
+        <strong>{lineMatch[1]}</strong>
+      </div>
+    );
+  }
+
+  return <div key={index} className="detail-evidence">{evidence}</div>;
+}
+
 // ── Finding Drawer ────────────────────────────────────────────────────────────
 const FindingDrawer: React.FC<{ finding: Finding | null; onClose: () => void }> = ({ finding, onClose }) => {
   const { setAIPendingFinding, setAIChatOpen } = useAIStore();
@@ -191,6 +247,7 @@ const FindingDrawer: React.FC<{ finding: Finding | null; onClose: () => void }> 
   const payloadLine = finding.evidence.find((e) => e.startsWith('Payload:'));
   const evidenceLines = finding.evidence.filter((e) => !e.startsWith('Payload:'));
   const guide = categoryGuide(finding);
+  const remediationPlan = finding.remediationPlan || buildRemediationPlan(finding);
 
   return (
     <div className="finding-drawer-backdrop" onClick={onClose}>
@@ -217,7 +274,7 @@ const FindingDrawer: React.FC<{ finding: Finding | null; onClose: () => void }> 
 
         {/* Detail body */}
         <div className="finding-detail">
-          <div className="finding-guide">
+          <section className="finding-section finding-guide finding-section-wide">
             <div>
               <div className="detail-label">Scanner đã làm gì?</div>
               <div className="guide-text">{guide.checked}</div>
@@ -230,38 +287,73 @@ const FindingDrawer: React.FC<{ finding: Finding | null; onClose: () => void }> 
               <div className="detail-label">Bước tiếp theo</div>
               <div className="guide-text">{guide.next}</div>
             </div>
-          </div>
-          <div>
-            <div className="detail-label">Cách scanner phát hiện</div>
-            <div className="detail-note">{collectorLabel(finding.collector)}</div>
-          </div>
-          <div>
-            <div className="detail-label">Tìm thấy tại</div>
-            <div className="detail-mono">{finding.target || finding.location}</div>
-          </div>
-          <div>
-            <div className="detail-label">Mã lỗ hổng</div>
-            <div className="detail-mono" style={{ color: 'var(--text-3)', fontSize: 11 }}>{finding.ruleId}</div>
-          </div>
+          </section>
+
+          <section className="finding-section finding-section-wide">
+            <div className="finding-section-title">Thông tin vị trí</div>
+            <div className="finding-info-grid">
+              <div>
+                <div className="detail-label">Cách scanner phát hiện</div>
+                <div className="detail-note">{collectorLabel(finding.collector)}</div>
+              </div>
+              <div>
+                <div className="detail-label">Tìm thấy tại</div>
+                <div className="detail-mono">{finding.location || finding.target}</div>
+              </div>
+              <div>
+                <div className="detail-label">Mã lỗ hổng</div>
+                <div className="detail-mono detail-rule-id">{finding.ruleId}</div>
+              </div>
+            </div>
+          </section>
+
           {isFuzzer && payloadLine && (
-            <div>
+            <section className="finding-section finding-section-wide">
               <div className="detail-label">Payload kiểm tra</div>
               <div className="detail-payload">{payloadLine.replace('Payload: ', '')}</div>
-            </div>
+            </section>
           )}
+
           {evidenceLines.length > 0 && (
-            <div>
+            <section className="finding-section finding-section-evidence">
               <div className="detail-label">Dữ liệu phát hiện</div>
-              {evidenceLines.map((e, i) => (
-                <div key={i} className="detail-evidence" style={{ marginBottom: 3 }}>{e}</div>
-              ))}
-            </div>
+              <div className="evidence-list">
+                {evidenceLines.map((e, i) => renderEvidence(e, i))}
+              </div>
+            </section>
           )}
-          <div>
+
+          <section className="finding-section finding-section-fix">
             <div className="detail-label">Cách khắc phục</div>
             <div className="detail-fix">{finding.remediation}</div>
-          </div>
-          <div>
+          </section>
+
+          <section className="finding-section remediation-plan finding-section-remediation">
+            <div className="detail-label">Đề xuất vị trí và thay đổi cần kiểm tra</div>
+            <div className="remediation-plan-note">{remediationPlan.confidenceNote}</div>
+            <div className="remediation-plan-location">{remediationPlan.locationHint}</div>
+            {remediationPlan.suggestedChange && (
+              <div className="remediation-change">
+                {remediationPlan.suggestedChange.from && (
+                  <div>
+                    <div className="remediation-change-label">Sửa từ</div>
+                    <pre>{remediationPlan.suggestedChange.from}</pre>
+                  </div>
+                )}
+                <div>
+                  <div className="remediation-change-label">Đề xuất thành</div>
+                  <pre>{remediationPlan.suggestedChange.to}</pre>
+                </div>
+              </div>
+            )}
+            <ol className="remediation-steps">
+              {remediationPlan.steps.map((step, index) => (
+                <li key={index}>{step}</li>
+              ))}
+            </ol>
+          </section>
+
+          <section className="finding-section finding-section-confidence">
             <div className="detail-label">Độ tin cậy nghĩa là gì?</div>
             <div className="confidence-meter" aria-label={`Độ tin cậy ${confidencePercent(finding.confidence)} phần trăm`}>
               <div className="confidence-meter-top">
@@ -273,8 +365,9 @@ const FindingDrawer: React.FC<{ finding: Finding | null; onClose: () => void }> 
               </div>
             </div>
             <div className="detail-note">{confidenceHelp(finding.confidence)}</div>
-          </div>
-          <div style={{ paddingTop: 4 }}>
+          </section>
+
+          <div className="finding-action-row finding-section-wide">
             <button
               className="btn-ask-ai"
               onClick={(e) => {
@@ -331,8 +424,8 @@ const FindingsTable: React.FC<{
                 <div className="finding-method">{collectorLabel(f.collector)}</div>
               </td>
               <td><span className="badge badge-cat">{formatOwaspCategory(f.owaspCategory)}</span></td>
-              <td className="finding-target" title={f.target || f.location}>
-                {f.target || f.location || '—'}
+              <td className="finding-target" title={f.location || f.target}>
+                {f.location || f.target || '—'}
               </td>
               <td>
                 <select

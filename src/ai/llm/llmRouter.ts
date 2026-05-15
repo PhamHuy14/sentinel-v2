@@ -18,6 +18,8 @@
  */
 
 import { AiQueryPayload, HISTORY_TURNS } from '../aiRouter.js';
+import { retrieveKnowledgeContext } from '../contextRetriever.js';
+import { assessAnswerQuality } from './answerQuality.js';
 import { AnswerCache } from './answerCache.js';
 import { crossCheck } from './crossChecker.js';
 import { ProviderMetricsTracker } from './metricsTracker.js';
@@ -38,13 +40,16 @@ const SECURITY_SYSTEM_PROMPT = `Bạn là SENTINEL AI — chuyên gia bảo mậ
 **XỬ LÝ NGỮ CẢNH (CONTEXT HANDLING):**
 - BẠN PHẢI đọc kỹ "Finding context (JSON)" (nếu được cung cấp) để phân tích trực tiếp vào vấn đề người dùng đang gặp phải. Hãy nhắc đến file code cụ thể, dòng lỗi, hoặc URL/tham số được đề cập trong JSON.
 - Đọc "Recent conversation" để giữ liền mạch trò chuyện (ví dụ người dùng hỏi "vậy cách fix nó là gì?", "nó" ở đây lấy từ lịch sử).
+- Nếu có "Structured remediation plan", PHẢI dùng nó để nêu file/URL, khoảng dòng, đoạn cần sửa từ đâu sang đâu. Nếu thiếu line/snippet thì nói rõ scanner chưa xác định được dòng chính xác.
 
 **QUY TẮC BẮT BUỘC:**
 1. LUÔN LUÔN trả lời bằng tiếng Việt chuyên nghiệp, tự nhiên và sát với ngữ cảnh.
+1a. Tiếng Việt PHẢI có dấu đầy đủ. Không được trả lời kiểu không dấu như "lo hong", "bao mat", "cach khac phuc".
 2. KHÔNG BAO GIỜ trả lời chung chung. Nếu có "Finding context", phải dựa vào nó để phân tích thay vì giải thích lý thuyết suông.
 3. Với câu hỏi kỹ thuật: PHẢI giải thích cơ chế hoạt động, ví dụ tấn công minh họa (PoC giáo dục), và các bước khắc phục cụ thể.
 4. Với câu hỏi "cách fix": PHẢI cho đủ bước, kèm code snippet sửa lỗi nếu có thể.
 5. KHÔNG cung cấp payload exploit thực tế có thể chạy để tấn công; chỉ dùng PoC minh họa giáo dục.
+6. Mọi đề xuất sửa code/config phải kèm cảnh báo rằng đây là gợi ý tham khảo, cần review và test kỹ trước khi áp dụng.
 
 **ĐỊNH DẠNG:**
 - Dùng Markdown: tiêu đề ##/###, danh sách -, **in đậm** cho thuật ngữ quan trọng.
@@ -151,6 +156,7 @@ function hasAnyTerm(text: string, terms: string[]): boolean {
 // NÂNG CẤP: Prompt builder thêm hướng dẫn output structure theo profile
 function buildContextAwarePrompt(payload: AiQueryPayload, profile: QuestionProfile): string {
   const sections: string[] = [];
+  const retrieved = retrieveKnowledgeContext(payload);
   sections.push(`User question:\n${payload.question.trim()}`);
 
   if (payload.findingContext && Object.keys(payload.findingContext).length > 0) {
@@ -169,12 +175,21 @@ function buildContextAwarePrompt(payload: AiQueryPayload, profile: QuestionProfi
     sections.push(`Recent conversation:\n${history}`);
   }
 
+  if (retrieved.items.length > 0) {
+    sections.push(
+      `Trusted SENTINEL context. Use these as grounding facts. If the context is insufficient, state what is missing instead of guessing.\n${retrieved.summary}`,
+    );
+  }
+
   // NÂNG CẤP: Hướng dẫn output cụ thể theo profile và bám sát ngữ cảnh
   const instructions: string[] = ['Hướng dẫn trả lời:'];
 
   if (payload.findingContext && Object.keys(payload.findingContext).length > 0) {
     instructions.push('- BẠN ĐANG PHÂN TÍCH MỘT LỖ HỔNG CỤ THỂ. Bắt buộc phải sử dụng dữ liệu trong "Finding context (JSON)" (tên file, dòng code, payload, rule name) để chỉ đích danh lỗi và cách sửa trực tiếp vào file đó.');
+    instructions.push('- Phần đề xuất vá lỗi phải nêu: file/URL cần kiểm tra, khoảng dòng nếu có, sửa từ pattern/đoạn nào sang hướng sửa nào, cách verify sau khi sửa, và disclaimer tham khảo.');
   }
+
+  instructions.push('- Luôn viết tiếng Việt có dấu đầy đủ trong phần giải thích, cảnh báo và hướng dẫn khắc phục.');
 
   if (payload.conversationHistory && payload.conversationHistory.length > 0) {
     instructions.push('- Tham khảo "Recent conversation" để giữ liền mạch ngữ cảnh (hiểu đúng các từ "nó", "file này", "lỗi trên" đang ám chỉ điều gì).');
@@ -206,6 +221,42 @@ function buildContextAwarePrompt(payload: AiQueryPayload, profile: QuestionProfi
   return sections.join('\n\n');
 }
 
+function buildConfiguredProviderReader(): (() => Promise<Set<string> | null>) {
+  let cache: { expiresAt: number; value: Set<string> | null } | null = null;
+
+  return async () => {
+    const now = Date.now();
+    if (cache && cache.expiresAt > now) return cache.value;
+
+    const bridge = (globalThis as {
+      owaspWorkbench?: {
+        getAIProviders?: () => Promise<Record<string, { configured: boolean }>>;
+      };
+    }).owaspWorkbench;
+
+    if (!bridge?.getAIProviders) {
+      cache = { expiresAt: now + 5_000, value: null };
+      return null;
+    }
+
+    try {
+      const providers = await bridge.getAIProviders();
+      const configured = new Set(
+        Object.entries(providers)
+          .filter(([, status]) => status.configured)
+          .map(([id]) => id),
+      );
+      cache = { expiresAt: now + 10_000, value: configured };
+      return configured;
+    } catch {
+      cache = { expiresAt: now + 5_000, value: null };
+      return null;
+    }
+  };
+}
+
+const readConfiguredProviders = buildConfiguredProviderReader();
+
 export class LLMRouter {
   private readonly providers: Map<string, LLMProvider>;
   private readonly metrics: ProviderMetricsTracker;
@@ -228,6 +279,7 @@ export class LLMRouter {
   private async rankProviders(): Promise<ScoredProvider[]> {
     const w = this.config.selectionWeights;
     const ranked: ScoredProvider[] = [];
+    const configuredProviders = await readConfiguredProviders();
 
     const prioritised = this.config.providerPriority
       .map(id => this.providers.get(id))
@@ -238,6 +290,7 @@ export class LLMRouter {
     }
 
     for (const provider of prioritised) {
+      if (configuredProviders && !configuredProviders.has(provider.id)) continue;
       if (this.metrics.isCircuitOpen(provider.id)) continue;
 
       const health = await provider.health();
@@ -505,6 +558,39 @@ export class LLMRouter {
     };
   }
 
+  private applyQualityGate(response: AiResponse, payload: AiQueryPayload): AiResponse {
+    if (response.source === 'knowledge_base') return response;
+
+    const retrieved = retrieveKnowledgeContext(payload);
+    const quality = assessAnswerQuality(response.answer, payload, retrieved);
+    const warnings = [
+      ...response.warnings,
+      `Grounding check ${quality.ok ? 'passed' : 'needs review'} (${quality.score.toFixed(2)})`,
+      ...quality.warnings.map(w => `Quality: ${w}`),
+      ...(retrieved.sourceIds.length ? [`Context sources: ${retrieved.sourceIds.join(', ')}`] : []),
+    ];
+
+    if (quality.ok) {
+      return {
+        ...response,
+        confidence: Math.min(0.95, Math.max(response.confidence, quality.score)),
+        warnings,
+      };
+    }
+
+    const reliabilityNote =
+      '\n\n---\n**Ghi chú độ tin cậy:** Câu trả lời này chưa bám đủ mạnh vào dữ liệu hiện có của SENTINEL. Hãy ưu tiên kiểm tra lại evidence/finding và dùng phần khắc phục như hướng dẫn tham khảo.';
+
+    return {
+      ...response,
+      answer: response.answer.includes('Ghi chú độ tin cậy')
+        ? response.answer
+        : `${response.answer}${reliabilityNote}`,
+      confidence: Math.min(response.confidence, quality.score),
+      warnings,
+    };
+  }
+
   // ── Phương thức truy vấn chính ───────────────────────────────────────────────────────
 
   async query(payload: AiQueryPayload): Promise<AiResponse> {
@@ -515,7 +601,7 @@ export class LLMRouter {
     // ── 0. Cache hit ──────────────────────────────────────────────────────────
     const cached = this.cache.get(question, cacheContext);
     if (cached) {
-      return {
+      return this.applyQualityGate({
         answer:         cached.answer,
         confidence:     cached.confidence,
         providersTried: [cached.providerUsed],
@@ -524,7 +610,7 @@ export class LLMRouter {
         warnings:       ['Served from cache'],
         latencyMs:      Date.now() - start,
         source:         'llm',
-      };
+      }, payload);
     }
 
     // ── 1. Phân loại câu hỏi & build prompt ──────────────────────────────────
@@ -543,7 +629,8 @@ export class LLMRouter {
 
     // ── 3. Academic & Complex: dùng consensus từ nhiều provider ───────────────
     if (profile === 'academic' || profile === 'complex') {
-      return this.queryWithConsensus(question, ranked, prompt, warnings, start, maxTokens, cacheContext, payload.signal);
+      const response = await this.queryWithConsensus(question, ranked, prompt, warnings, start, maxTokens, cacheContext, payload.signal);
+      return this.applyQualityGate(response, payload);
     }
 
     // ── 4. Security & Short: gọi tuần tự, lấy provider tốt nhất ──────────────
@@ -589,7 +676,7 @@ export class LLMRouter {
         providerUsed: primaryProvider,
         crossChecked: false,
       }, cacheContext);
-      return {
+      return this.applyQualityGate({
         answer:         primaryAnswer,
         confidence:     initialConfidence,
         providersTried,
@@ -598,7 +685,7 @@ export class LLMRouter {
         warnings,
         latencyMs:      Date.now() - start,
         source:         'llm',
-      };
+      }, payload);
     }
 
     // Tìm provider thứ 2
@@ -635,7 +722,7 @@ export class LLMRouter {
       crossChecked,
     }, cacheContext);
 
-    return {
+    return this.applyQualityGate({
       answer:         finalAnswer,
       confidence:     finalConfidence,
       providersTried,
@@ -644,7 +731,7 @@ export class LLMRouter {
       warnings,
       latencyMs:      Date.now() - start,
       source:         crossChecked ? 'synthesized' : 'llm',
-    };
+    }, payload);
   }
 
   // ── Factory tạo thông báo lỗi ─────────────────────────────────────────────────

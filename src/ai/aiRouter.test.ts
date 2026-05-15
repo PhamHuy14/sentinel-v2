@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { routeQuery } from './aiRouter';
 
+const VIETNAMESE_DIACRITICS = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i;
+
 describe('aiRouter routing', () => {
   it('answers Docker security (regression: not path traversal)', () => {
     const ans = routeQuery({ question: 'Docker security là gì?' });
@@ -45,5 +47,24 @@ describe('aiRouter routing', () => {
     expect(ans.toLowerCase()).toContain('collector');
     expect(ans).toMatch(/config-scanner|secret-scanner|dependency-scanner|tool/i);
   });
-});
 
+  it('understands Vietnamese questions with diacritics and answers with diacritics', () => {
+    const ans = routeQuery({ question: 'SQL Injection là gì và cách khắc phục?' });
+    expect(ans.toLowerCase()).toContain('sql injection');
+    expect(ans).toMatch(/Cách khắc phục|khắc phục|xử lý|an toàn/i);
+    expect(ans).toMatch(VIETNAMESE_DIACRITICS);
+  });
+
+  it('understands Vietnamese questions without diacritics and still answers with diacritics', () => {
+    const ans = routeQuery({ question: 'sql injection la gi va cach khac phuc?' });
+    expect(ans.toLowerCase()).toContain('sql injection');
+    expect(ans).toMatch(/Cách khắc phục|khắc phục|xử lý|an toàn/i);
+    expect(ans).toMatch(VIETNAMESE_DIACRITICS);
+  });
+
+  it('understands Sentinel usage questions without diacritics', () => {
+    const ans = routeQuery({ question: 'cach su dung sentinel nhu the nao?' });
+    expect(ans).toMatch(/Chọn|Nhập|Cấu hình|Nhấn|Bước/i);
+    expect(ans).toMatch(VIETNAMESE_DIACRITICS);
+  });
+});

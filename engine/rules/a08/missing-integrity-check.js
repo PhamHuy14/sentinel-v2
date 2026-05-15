@@ -1,4 +1,8 @@
 const { normalizeFinding } = require('../../models/finding');
+const {
+  buildSourceRemediationPlan,
+  evidenceWithLocation,
+} = require('../../utils/source-locator');
 
 /**
  * Phát hiện thiếu Subresource Integrity (SRI) và integrity controls
@@ -30,6 +34,33 @@ function isCdnUrl(src) {
   }
 }
 
+function lineFromIndex(content, index) {
+  return content.slice(0, index).split(/\r?\n/).length;
+}
+
+function snippetAround(content, lineNumber, radius = 2) {
+  const lines = content.split(/\r?\n/);
+  const start = Math.max(1, lineNumber - radius);
+  const end = Math.min(lines.length, lineNumber + radius);
+  const snippet = [];
+  for (let line = start; line <= end; line += 1) {
+    const marker = line === lineNumber ? '>' : ' ';
+    snippet.push(`${marker} ${String(line).padStart(4, ' ')} | ${lines[line - 1]}`);
+  }
+  return snippet.join('\n');
+}
+
+function locatorFromMatch(content, match) {
+  if (!match || typeof match.index !== 'number') return null;
+  const lineStart = lineFromIndex(content, match.index);
+  return {
+    lineStart,
+    lineEnd: lineStart,
+    snippet: snippetAround(content, lineStart),
+    matchedText: match[0].replace(/\s+/g, ' ').trim().slice(0, 500),
+  };
+}
+
 function runMissingIntegrityCheck(context) {
   const findings = [];
 
@@ -49,7 +80,9 @@ function runMissingIntegrityCheck(context) {
 
     // ── 1. External <script src> không có integrity ──────────────────────────
     const scriptTags = [...content.matchAll(/<script\b([^>]*)>/gi)];
-    for (const [fullTag, attrs] of scriptTags) {
+    for (const match of scriptTags) {
+      const fullTag = match[0];
+      const attrs = match[1];
       const srcMatch = attrs.match(/src=["']([^"']+)["']/i);
       if (!srcMatch) continue;
       const src = srcMatch[1];
@@ -57,6 +90,12 @@ function runMissingIntegrityCheck(context) {
       if (/integrity=/i.test(attrs)) continue;
 
       const isCdn = isCdnUrl(src);
+      const locator = locatorFromMatch(content, match);
+      const remediation =
+        'Thêm integrity + crossorigin: ' +
+        `<script src="${src.slice(0, 60)}" integrity="sha384-..." crossorigin="anonymous">. ` +
+        'Tạo hash: openssl dgst -sha384 -binary file.js | openssl base64 -A. ' +
+        'Hoặc dùng https://www.srihash.org/';
       findings.push(normalizeFinding({
         ruleId: 'A08-INTEGRITY-001',
         owaspCategory: 'A08',
@@ -64,18 +103,20 @@ function runMissingIntegrityCheck(context) {
         severity: isCdn ? 'high' : 'medium',
         confidence: 'high',
         target: file.path,
-        location: `<script src="${src.slice(0, 80)}">`,
-        evidence: [
+        location: locator ? `${file.path}:${locator.lineStart}` : `<script src="${src.slice(0, 80)}">`,
+        evidence: evidenceWithLocation([
           fullTag.slice(0, 180),
           isCdn
             ? `CDN script "${src.slice(0, 80)}" không có integrity hash — nếu CDN bị compromise, script độc hại sẽ được load.`
             : `External script không có SRI — nội dung có thể bị thay đổi mà không phát hiện.`,
-        ],
-        remediation:
-          'Thêm integrity + crossorigin: ' +
-          `<script src="${src.slice(0, 60)}" integrity="sha384-..." crossorigin="anonymous">. ` +
-          'Tạo hash: openssl dgst -sha384 -binary file.js | openssl base64 -A. ' +
-          'Hoặc dùng https://www.srihash.org/',
+        ], locator),
+        remediation,
+        remediationPlan: buildSourceRemediationPlan({
+          filePath: file.path,
+          locator,
+          summary: remediation,
+          suggestedTo: `Thêm integrity="sha384-..." crossorigin="anonymous" vào tag script đang load ${src}.`,
+        }),
         references: [
           'https://developer.mozilla.org/en-US/docs/Web/Security/Subresource_Integrity',
           'https://owasp.org/Top10/2025/A08_2025-Software_or_Data_Integrity_Failures/',
@@ -87,7 +128,9 @@ function runMissingIntegrityCheck(context) {
 
     // ── 2. External <link rel="stylesheet"> không có integrity ───────────────
     const linkTags = [...content.matchAll(/<link\b([^>]*)>/gi)];
-    for (const [fullTag, attrs] of linkTags) {
+    for (const match of linkTags) {
+      const fullTag = match[0];
+      const attrs = match[1];
       const isStylesheet = /rel=["']stylesheet["']/i.test(attrs);
       if (!isStylesheet) continue;
       const hrefMatch = attrs.match(/href=["']([^"']+)["']/i);
@@ -99,6 +142,10 @@ function runMissingIntegrityCheck(context) {
       const isCdn = isCdnUrl(href);
       if (!isCdn) continue; // Chỉ cảnh báo CDN CSS (third-party CSS ít critical hơn script)
 
+      const locator = locatorFromMatch(content, match);
+      const remediation =
+        'Thêm integrity attribute cho external CSS: ' +
+        `<link href="${href.slice(0, 60)}" integrity="sha384-..." crossorigin="anonymous" rel="stylesheet">`;
       findings.push(normalizeFinding({
         ruleId: 'A08-INTEGRITY-002',
         owaspCategory: 'A08',
@@ -106,14 +153,18 @@ function runMissingIntegrityCheck(context) {
         severity: 'medium',
         confidence: 'high',
         target: file.path,
-        location: `<link href="${href.slice(0, 80)}">`,
-        evidence: [
+        location: locator ? `${file.path}:${locator.lineStart}` : `<link href="${href.slice(0, 80)}">`,
+        evidence: evidenceWithLocation([
           fullTag.slice(0, 180),
           'CSS từ CDN không có integrity — CSS injection có thể dùng để exfiltrate data hoặc overlay phishing UI.',
-        ],
-        remediation:
-          'Thêm integrity attribute cho external CSS: ' +
-          `<link href="${href.slice(0, 60)}" integrity="sha384-..." crossorigin="anonymous" rel="stylesheet">`,
+        ], locator),
+        remediation,
+        remediationPlan: buildSourceRemediationPlan({
+          filePath: file.path,
+          locator,
+          summary: remediation,
+          suggestedTo: `Thêm integrity="sha384-..." crossorigin="anonymous" vào tag stylesheet đang load ${href}.`,
+        }),
         references: [
           'https://developer.mozilla.org/en-US/docs/Web/Security/Subresource_Integrity',
           'https://owasp.org/Top10/2025/A08_2025-Software_or_Data_Integrity_Failures/',

@@ -19,7 +19,7 @@ function normalizeFinding(raw) {
     ? raw.severity : 'low';
   const conf = ['high', 'medium', 'low', 'potential'].includes(raw.confidence)
     ? raw.confidence : 'low';
-  return {
+  const finding = {
     ruleId:        String(raw.ruleId        || 'UNKNOWN'),
     owaspCategory: String(raw.owaspCategory || 'UNKNOWN'),
     title:         String(raw.title         || 'Untitled finding'),
@@ -29,8 +29,55 @@ function normalizeFinding(raw) {
     location:      String(raw.location      || ''),
     evidence:      Array.isArray(raw.evidence) ? raw.evidence.map(String) : [],
     remediation:   String(raw.remediation   || ''),
+    remediationPlan: raw.remediationPlan && typeof raw.remediationPlan === 'object' ? raw.remediationPlan : null,
     references:    Array.isArray(raw.references) ? raw.references.map(String) : [],
     collector:     String(raw.collector     || 'unknown'),
+  };
+  if (!finding.remediationPlan) finding.remediationPlan = buildFallbackRemediationPlan(finding);
+  return finding;
+}
+
+function parseLineHint(text) {
+  const value = String(text || '');
+  const match =
+    value.match(/(?:line|dòng|dong)\s*(?:nghi\s*v[aấ]n)?\s*:?\s*(\d+)/i) ||
+    value.match(/^\s*>\s*(\d+)\s*\|/m) ||
+    value.match(/:(\d+)(?::\d+)?$/);
+  if (!match) return undefined;
+  const line = Number.parseInt(match[1], 10);
+  return Number.isFinite(line) && line > 0 ? line : undefined;
+}
+
+function buildFallbackRemediationPlan(finding) {
+  const isUrl = /^https?:\/\//i;
+  const filePath = finding.collector === 'source' && !isUrl.test(finding.target)
+    ? finding.target || (!isUrl.test(finding.location) ? finding.location : '')
+    : '';
+  const url = isUrl.test(finding.target) ? finding.target : isUrl.test(finding.location) ? finding.location : '';
+  const line = parseLineHint(finding.location) || parseLineHint(finding.evidence.join('\n'));
+  const locationHint = filePath
+    ? line
+      ? `Kiểm tra file ${filePath}, khoảng dòng ${line}.`
+      : `Kiểm tra file ${filePath}. Scanner chưa xác định được dòng chính xác, hãy tìm theo evidence/pattern.`
+    : url
+      ? `Kiểm tra endpoint ${url}, vị trí runtime: ${finding.location || 'response/request'}.`
+      : `Kiểm tra vị trí: ${finding.location || finding.target || 'chưa xác định rõ từ evidence'}.`;
+  const suggestedTo = finding.remediation || 'Xác minh evidence và áp dụng biện pháp khắc phục phù hợp.';
+  return {
+    summary: suggestedTo,
+    confidenceNote: 'Đề xuất này được tạo tự động từ evidence của SENTINEL, chỉ mang tính tham khảo. Hãy đọc kỹ code, chạy test và review tác động trước khi sửa dự án.',
+    filePath: filePath || undefined,
+    lineStart: line,
+    lineEnd: line,
+    url: url || undefined,
+    locationHint,
+    steps: [
+      locationHint,
+      finding.evidence.length ? `Đối chiếu evidence: ${finding.evidence.slice(0, 2).join(' | ')}` : 'Tái hiện finding trong môi trường kiểm thử.',
+      `Đề xuất sửa: ${suggestedTo}`,
+      'Chạy lại test và quét lại bằng SENTINEL để xác nhận.',
+    ],
+    suggestedChange: { to: suggestedTo, language: 'text' },
   };
 }
 
@@ -157,6 +204,15 @@ function buildFindingCardHtml(finding, idx) {
   const refsHtml = finding.references.length
     ? finding.references.map(r => `<li><a href="${escapeHtml(r)}" style="color:#4cb3ff;font-size:11px;word-break:break-all">${escapeHtml(r)}</a></li>`).join('')
     : '';
+  const plan = finding.remediationPlan;
+  const planHtml = plan ? `
+    <div style="margin-bottom:8px;background:rgba(76,179,255,.07);border:1px solid rgba(76,179,255,.22);border-left:3px solid #4cb3ff;border-radius:6px;padding:8px 12px">
+      <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#4cb3ff;margin-bottom:4px">De xuat vi tri & thay doi</div>
+      <div style="font-size:11px;color:#7f91a1;line-height:1.5;margin-bottom:6px">${escapeHtml(plan.confidenceNote || 'De xuat tu dong, can review truoc khi ap dung.')}</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#e6edf3;background:#111921;border:1px solid #2b3945;border-radius:5px;padding:6px;margin-bottom:6px">${escapeHtml(plan.locationHint || '')}</div>
+      ${plan.suggestedChange?.from ? `<div style="font-size:11px;color:#b2c0cc;margin-bottom:4px"><strong>Sua tu:</strong> ${escapeHtml(plan.suggestedChange.from)}</div>` : ''}
+      ${plan.suggestedChange?.to ? `<div style="font-size:11px;color:#b2c0cc"><strong>De xuat thanh:</strong> ${escapeHtml(plan.suggestedChange.to)}</div>` : ''}
+    </div>` : '';
 
   return `
   <article id="finding-${idx}" style="background:#1b2630;border:1px solid #2b3945;border-left:3px solid ${c.border};border-radius:10px;padding:16px 18px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.18)">
@@ -182,6 +238,7 @@ function buildFindingCardHtml(finding, idx) {
       <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#2da44e;margin-bottom:4px">Khắc phục</div>
       <div style="font-size:12px;color:#b2c0cc;line-height:1.5">${escapeHtml(finding.remediation)}</div>
     </div>` : ''}
+    ${planHtml}
     ${refsHtml ? `<ul style="margin:0;padding-left:16px;font-size:11px">${refsHtml}</ul>` : ''}
   </article>`;
 }
@@ -410,6 +467,7 @@ function buildJsonReport(scanResult) {
       location:      f.location,
       evidence:      f.evidence,
       remediation:   f.remediation,
+      remediationPlan: f.remediationPlan,
       references:    f.references,
       collector:     f.collector,
     })),

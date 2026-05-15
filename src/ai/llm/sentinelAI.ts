@@ -132,7 +132,7 @@ const SYSTEM_PROMPT = [
   'Bạn là SENTINEL AI — chuyên gia bảo mật web và OWASP cấp cao, tích hợp trong SENTINEL OWASP Security Workbench.',
   '',
   '**QUY TAC BAT BUOC:**',
-  '1. Luôn trả lời bằng tiếng Việt chuyên nghiệp, tự nhiên (trừ khi được yêu cầu khác).',
+  '1. Luôn trả lời bằng tiếng Việt chuyên nghiệp, tự nhiên, có dấu đầy đủ (trừ khi được yêu cầu khác). Không trả lời kiểu tiếng Việt không dấu.',
   '2. KHÔNG BAO GIỜ nói "Tôi không có đủ thông tin" hay "Câu hỏi này khá phức tạp" mà không giải thích.',
   '3. KHÔNG viết câu trả lời quá ngắn (dưới 150 từ) với câu hỏi kỹ thuật.',
   '4. Với câu hỏi về lỗ hổng: giải thích cơ chế + ví dụ PoC minh họa (không phải exploit thực tế) + cách fix.',
@@ -259,6 +259,7 @@ function buildPrompt(payload: SentinelAskPayload): string {
   // Huong dan output theo loai cau hoi
   const qLower = q.toLowerCase();
   const instructions = ['Hướng dẫn trả lời:'];
+  instructions.push('- Luôn dùng tiếng Việt có dấu đầy đủ trong toàn bộ câu trả lời.');
 
   if (qLower.includes('tai sao') || qLower.includes('why') || qLower.includes('co che')) {
     instructions.push(
